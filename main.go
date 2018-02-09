@@ -54,7 +54,7 @@ func NewStorage(root string, n int) *Storage {
 	return storage
 }
 
-func (this *Storage) read(sid string, offset int64) []byte {
+func (this *Storage) read(sid string, offset int64) ([]byte, error) {
 	id := hash(sid)
 	file := this.files[id%uint32(len(this.files))]
 
@@ -64,22 +64,22 @@ func (this *Storage) read(sid string, offset int64) []byte {
 	dataLenBytes := make([]byte, 4)
 	_, err := file.descriptor.ReadAt(dataLenBytes, offset)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	var dataLen uint32
 	buf := bytes.NewReader(dataLenBytes)
 	err = binary.Read(buf, binary.LittleEndian, &dataLen)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	output := make([]byte, dataLen)
 	_, err = file.descriptor.ReadAt(output, offset+4)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return output
+	return output, nil
 }
 
 func (this *Storage) append(sid string, data io.Reader) (int64, string) {
@@ -149,8 +149,17 @@ func main() {
 
 	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
 		offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
-		if err == nil {
-			w.Write(storage.read(r.URL.Query().Get("id"), offset))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			data, err := storage.read(r.URL.Query().Get("id"), offset)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+			} else {
+				w.Write(data)
+			}
 		}
 	})
 
