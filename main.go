@@ -1,17 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"hash/fnv"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"sync"
-
 	"syscall"
 )
 
@@ -51,6 +54,34 @@ func NewStorage(root string, n int) *Storage {
 	return storage
 }
 
+func (this *Storage) read(sid string, offset int64) []byte {
+	id := hash(sid)
+	file := this.files[id%uint32(len(this.files))]
+
+	file.mutex.RLock()
+	defer file.mutex.RUnlock()
+
+	dataLenBytes := make([]byte, 4)
+	_, err := file.descriptor.ReadAt(dataLenBytes, offset)
+	if err != nil {
+		panic(err)
+	}
+
+	var dataLen uint32
+	buf := bytes.NewReader(dataLenBytes)
+	err = binary.Read(buf, binary.LittleEndian, &dataLen)
+	if err != nil {
+		panic(err)
+	}
+
+	output := make([]byte, dataLen)
+	_, err = file.descriptor.ReadAt(output, offset+4)
+	if err != nil {
+		panic(err)
+	}
+	return output
+}
+
 func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 	id := hash(sid)
 	file := this.files[id%uint32(len(this.files))]
@@ -59,11 +90,26 @@ func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 	defer file.mutex.Unlock()
 
 	currentOffset := file.offset
-	written, err := io.Copy(file.descriptor, data)
+	b, err := ioutil.ReadAll(data)
+	if err != nil {
+		return -1, ""
+	}
+
+	dataLen := make([]byte, 4)
+	binary.LittleEndian.PutUint32(dataLen, uint32(len(b)))
+
+	written, err := file.descriptor.Write(dataLen)
 	if err != nil {
 		panic(err)
 	}
-	file.offset += written
+	file.offset += int64(written)
+
+	written, err = file.descriptor.Write(b)
+	if err != nil {
+		panic(err)
+	}
+	file.offset += int64(written)
+
 	return currentOffset, file.path
 }
 
@@ -78,6 +124,7 @@ func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp", "root directory")
 	flag.Parse()
+
 	storage := NewStorage(*proot, *pnBuckets)
 
 	sigs := make(chan os.Signal, 1)
@@ -95,9 +142,16 @@ func main() {
 
 	}()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		offset, file := storage.append(r.URL.Path, r.Body)
+	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
+		offset, file := storage.append(r.URL.Query().Get("id"), r.Body)
 		w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
+	})
+
+	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+		offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+		if err == nil {
+			w.Write(storage.read(r.URL.Query().Get("id"), offset))
+		}
 	})
 
 	err := http.ListenAndServe(*pbind, nil)

@@ -17,14 +17,18 @@ $ go run main.go -buckets 10 -bind :8001
 2018/02/09 23:26:17 openning: /tmp/append.8.raw with offset: 0
 2018/02/09 23:26:17 openning: /tmp/append.9.raw with offset: 0
 
-$ curl -XPOST -d 'some text' http://localhost:8001/some_identifier
-{"offset":0,"file":"/tmp/append.2.raw"}
 
-$ curl -XPOST -d 'some other data in same identifier' http://localhost:8001/some_identifier
-{"offset":9,"file":"/tmp/append.2.raw"}
-$ curl -XPOST -d 'zzz' http://localhost:8001/some_identifier
-{"offset":43,"file":"/tmp/append.2.raw"}
+$ curl -XPOST -d 'some text' 'http://localhost:8001/append?id=some_identifier'
+{"offset":0,"file":"/tmp/append.3.raw"}
 
+$ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8001/append?id=some_identifier'
+{"offset":17,"file":"/tmp/append.3.raw"}
+
+$ curl 'http://localhost:8001/get?id=some_identifier&offset=17'
+some other data in same identifier
+
+the format is very simple, it stores the length of the item in 4 bytes:
+[len]some text[len]some other data in same identifier
 
 
 * not very safe, it just closes the file descriptors on sigterm/sigint
