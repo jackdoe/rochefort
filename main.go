@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type StoreItem struct {
@@ -174,6 +175,17 @@ func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (i
 func (this *MultiStore) read(storageIdentifier, sid string, offset int64) ([]byte, error) {
 	return this.find(storageIdentifier).read(sid, offset)
 }
+func makeTimestamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+func Log(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t0 := makeTimestamp()
+		handler.ServeHTTP(w, r)
+		log.Printf("%s %s %s took: %d", r.RemoteAddr, r.Method, r.URL, makeTimestamp()-t0)
+	})
+}
 
 func main() {
 	var pnBuckets = flag.Int("buckets", 128, "number of files to open")
@@ -256,7 +268,7 @@ func main() {
 		}
 	})
 	log.Printf("starting http server on %s", *pbind)
-	err := http.ListenAndServe(*pbind, nil)
+	err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
 	if err != nil {
 		log.Fatal(err)
 	}
