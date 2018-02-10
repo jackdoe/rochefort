@@ -11,7 +11,10 @@ example usage:
 
   Client client = new Client("http://localhost:8000");
 
+  // stores data for "exampleKey"
   long offset = client.append("exampleKey", new byte[]{0,1,2,3,4,5});
+
+  // fetches data for "exampleKey" with the appropriate offset
   byte[] data = client.get("exampleKey",offset);
   // data is now new byte[]{0,1,2,3,4,5}
 
