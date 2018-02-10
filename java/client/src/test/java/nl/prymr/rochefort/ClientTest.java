@@ -5,10 +5,11 @@ import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class ClientTest extends TestCase {
   Client client;
@@ -75,5 +76,29 @@ public class ClientTest extends TestCase {
         }
       }
     }
+  }
+
+  public void testManyAsync() throws Exception {
+    int threadCount = 20;
+    Callable<Long> task =
+        new Callable<Long>() {
+          @Override
+          public Long call() {
+            try {
+              testApp();
+              return 1L;
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
+          }
+        };
+    List<Callable<Long>> tasks = Collections.nCopies(threadCount, task);
+    ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+    List<Future<Long>> futures = executorService.invokeAll(tasks);
+    long sum = 0;
+    for (Future<Long> f : futures) {
+      sum += f.get();
+    }
+    assertEquals(sum, threadCount);
   }
 }
