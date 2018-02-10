@@ -71,5 +71,13 @@ the format is very simple, it stores the length of the item in 4 bytes:
 [len]some text[len]some other data in same identifier
 
 
+you can also pass "storagePrefix" parameter and this will create different
+directories per storagePrefix, for example
+?storagePrefix=events_from_20171111 
+?storagePrefix=events_from_20171112
+and then you simply delete the directories you dont need
+
+
 * not very safe, it just closes the file descriptors on sigterm/sigint
   use at your own risk
+

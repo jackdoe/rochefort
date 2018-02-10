@@ -22,7 +22,7 @@ type StoreItem struct {
 	path       string
 	descriptor *os.File
 	offset     int64
-	mutex      sync.RWMutex
+	sync.RWMutex
 }
 type Storage struct {
 	files []*StoreItem
@@ -32,6 +32,9 @@ func NewStorage(root string, n int) *Storage {
 	storage := &Storage{
 		files: make([]*StoreItem, n),
 	}
+
+	os.MkdirAll(root, 0700)
+
 	for i := 0; i < n; i++ {
 		filePath := path.Join(root, fmt.Sprintf("append.%d.raw", i))
 		f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0600)
@@ -58,8 +61,8 @@ func (this *Storage) read(sid string, offset int64) ([]byte, error) {
 	id := hash(sid)
 	file := this.files[id%uint32(len(this.files))]
 
-	file.mutex.RLock()
-	defer file.mutex.RUnlock()
+	file.RLock()
+	defer file.RUnlock()
 
 	dataLenBytes := make([]byte, 4)
 	_, err := file.descriptor.ReadAt(dataLenBytes, offset)
@@ -86,8 +89,8 @@ func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 	id := hash(sid)
 	file := this.files[id%uint32(len(this.files))]
 
-	file.mutex.Lock()
-	defer file.mutex.Unlock()
+	file.Lock()
+	defer file.Unlock()
 
 	currentOffset := file.offset
 	b, err := ioutil.ReadAll(data)
@@ -119,31 +122,70 @@ func hash(s string) uint32 {
 	return h.Sum32()
 }
 
+type MultiStore struct {
+	stores   map[string]*Storage
+	nBuckets int
+	root     string
+	sync.RWMutex
+}
+
+func (this *MultiStore) find(storageIdentifier string) *Storage {
+	if storageIdentifier == "" {
+		storageIdentifier = "default"
+	}
+	this.RLock()
+	storage, ok := this.stores[storageIdentifier]
+	this.RUnlock()
+	if !ok {
+		this.Lock()
+
+		storage = NewStorage(path.Join(this.root, storageIdentifier), this.nBuckets)
+		this.stores[storageIdentifier] = storage
+
+		this.Unlock()
+	}
+	return storage
+}
+
+func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (int64, string) {
+	return this.find(storageIdentifier).append(sid, data)
+}
+
+func (this *MultiStore) read(storageIdentifier, sid string, offset int64) ([]byte, error) {
+	return this.find(storageIdentifier).read(sid, offset)
+}
+
 func main() {
 	var pnBuckets = flag.Int("buckets", 128, "number of files to open")
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp", "root directory")
 	flag.Parse()
 
-	storage := NewStorage(*proot, *pnBuckets)
+	multiStore := &MultiStore{
+		stores:   make(map[string]*Storage),
+		nBuckets: *pnBuckets,
+		root:     *proot,
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
 		log.Printf("\nReceived an interrupt, stopping services...\n")
-
-		for _, file := range storage.files {
-			file.mutex.Lock() // dont unlock it
-			file.descriptor.Close()
-			log.Printf("closing: %s", file.path)
+		multiStore.Lock() // dont unlock it
+		for _, storage := range multiStore.stores {
+			for _, file := range storage.files {
+				file.Lock() // dont unlock it
+				file.descriptor.Close()
+				log.Printf("closing: %s", file.path)
+			}
 		}
 		os.Exit(0)
 
 	}()
 
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		offset, file := storage.append(r.URL.Query().Get("id"), r.Body)
+		offset, file := multiStore.append(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), r.Body)
 		w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
 	})
 
@@ -153,7 +195,7 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			data, err := storage.read(r.URL.Query().Get("id"), offset)
+			data, err := multiStore.read(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), offset)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
@@ -176,13 +218,12 @@ func main() {
 		for i := 0; i < len(b)/8; i++ {
 			var offset uint64
 			err = binary.Read(buf, binary.LittleEndian, &offset)
-			data, err := storage.read(r.URL.Query().Get("id"), int64(offset))
-			if err != nil {
-				binary.LittleEndian.PutUint32(dataLenRaw, 0)
-				w.Write(dataLenRaw)
-				w.Write([]byte(fmt.Sprintf("storage.read: %s", err.Error())))
-				break
-			} else {
+			data, err := multiStore.read(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), int64(offset))
+
+			// XXX: we ignore the error on purpose
+			// as the storage is not fsyncing, it could very well lose some updates
+			// also the data is not checksummed, so might very well be corrupted
+			if err == nil {
 				binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
 				w.Write(dataLenRaw)
 				w.Write(data)
