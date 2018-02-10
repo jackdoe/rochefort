@@ -116,3 +116,13 @@ V: the stored value
 DDDDTTTTTTTTCCCCVVVVVVVVVVVVVVVVVVVV...DDDDTTTTTTTTCCCCVVVVVV....
 
 ```
+
+as you can see the value is not included in the checksum, I am
+checking only the header as my usecase is quite ok with
+missing/corrupting the data itself, but it is not ok if corrupted
+header makes us allocate 10gb in `output := make([]byte, dataLen)`
+
+
+## LICENSE
+
+MIT
