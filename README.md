@@ -11,14 +11,13 @@ $ go run main.go -buckets 10 -bind :8001 -root /tmp
 2018/02/10 12:06:21 starting http server on :8001
 ....
 
+```
 
 ### parameters
 * buckets: number of filers per storagePrefix
-* root: root directory, files will be created at
-`root/storagePrefix||default/append.%d.raw`
+* root: root directory, files will be created at `root/storagePrefix||default/append.%d.raw`
 * bind: address to bind to
 
-```
 
 ## STORE
 
