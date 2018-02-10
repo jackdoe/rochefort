@@ -165,35 +165,17 @@ func main() {
 
 	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
 		dataLenRaw := make([]byte, 4)
-		offsetRaw := make([]byte, 8)
-		buf := bytes.NewReader(offsetRaw)
-		body := r.Body
-		for {
-			n, err := body.Read(offsetRaw)
-			if err != nil {
-				if err != io.EOF {
-					binary.LittleEndian.PutUint32(dataLenRaw, 0)
-					w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
-					break
-				} else {
-					if n == 8 {
-						// last 8 bytes
-					} else {
-						if n < 8 && n > 0 {
-							binary.LittleEndian.PutUint32(dataLenRaw, 0)
-							w.Write([]byte("request less than 8 bytes"))
-							break
-						}
-						break
-					}
-				}
-			}
-
+		defer r.Body.Close()
+		b, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			binary.LittleEndian.PutUint32(dataLenRaw, 0)
+			w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
+			return
+		}
+		buf := bytes.NewReader(b)
+		for i := 0; i < len(b)/8; i++ {
 			var offset uint64
-
-			buf.Seek(0, 0)
 			err = binary.Read(buf, binary.LittleEndian, &offset)
-
 			data, err := storage.read(r.URL.Query().Get("id"), int64(offset))
 			if err != nil {
 				binary.LittleEndian.PutUint32(dataLenRaw, 0)
