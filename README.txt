@@ -65,8 +65,6 @@ data
 \00\0\0\0
 error text
 
-
-
 the format is very simple, it stores the length of the item in 4 bytes:
 [len]some text[len]some other data in same identifier
 
@@ -76,6 +74,10 @@ directories per storagePrefix, for example
 ?storagePrefix=events_from_20171111 
 ?storagePrefix=events_from_20171112
 and then you simply delete the directories you dont need
+
+CLOSE closes storagePrefix so it can be deleted
+$ curl http://localhost:8000/close?storagePrefix=events_from_20171112
+{"success":true}
 
 
 * not very safe, it just closes the file descriptors on sigterm/sigint

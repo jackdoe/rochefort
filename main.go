@@ -147,6 +147,22 @@ func (this *MultiStore) find(storageIdentifier string) *Storage {
 	return storage
 }
 
+func (this *MultiStore) close(storageIdentifier string) {
+	this.Lock()
+	defer this.Unlock()
+	if storageIdentifier == "" {
+		storageIdentifier = "default"
+	}
+	storage, ok := this.stores[storageIdentifier]
+	if ok {
+		for _, file := range storage.files {
+			file.descriptor.Close()
+			log.Printf("closing: %s", file.path)
+		}
+	}
+	delete(this.stores, storageIdentifier)
+}
+
 func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (int64, string) {
 	return this.find(storageIdentifier).append(sid, data)
 }
@@ -183,6 +199,11 @@ func main() {
 		os.Exit(0)
 
 	}()
+
+	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
+		multiStore.close(r.URL.Query().Get("storagePrefix"))
+		w.Write([]byte("{\"success\":true}"))
+	})
 
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
 		offset, file := multiStore.append(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), r.Body)
