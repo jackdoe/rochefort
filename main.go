@@ -169,6 +169,7 @@ func (this *MultiStore) find(storageIdentifier string) *Storage {
 	if storageIdentifier == "" {
 		storageIdentifier = "default"
 	}
+
 	this.RLock()
 	storage, ok := this.stores[storageIdentifier]
 	this.RUnlock()
@@ -220,6 +221,10 @@ func Log(handler http.Handler) http.Handler {
 	})
 }
 
+const storagePrefixKey = "storagePrefix"
+const idKey = "id"
+const offsetKey = "offset"
+
 func main() {
 	var pnBuckets = flag.Int("buckets", 128, "number of files to open")
 	var pbind = flag.String("bind", ":8000", "address to bind to")
@@ -250,22 +255,22 @@ func main() {
 	}()
 
 	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
-		multiStore.close(r.URL.Query().Get("storagePrefix"))
+		multiStore.close(r.URL.Query().Get(storagePrefixKey))
 		w.Write([]byte("{\"success\":true}"))
 	})
 
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		offset, file := multiStore.append(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), r.Body)
+		offset, file := multiStore.append(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), r.Body)
 		w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
 	})
 
 	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
-		offset, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 64)
+		offset, err := strconv.ParseInt(r.URL.Query().Get(offsetKey), 10, 64)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			data, err := multiStore.read(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), offset)
+			data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), offset)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
@@ -288,7 +293,7 @@ func main() {
 		for i := 0; i < len(b)/8; i++ {
 			var offset uint64
 			err = binary.Read(buf, binary.LittleEndian, &offset)
-			data, err := multiStore.read(r.URL.Query().Get("storagePrefix"), r.URL.Query().Get("id"), int64(offset))
+			data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), int64(offset))
 
 			// XXX: we ignore the error on purpose
 			// as the storage is not fsyncing, it could very well lose some updates
