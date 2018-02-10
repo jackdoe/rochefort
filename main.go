@@ -292,7 +292,7 @@ func main() {
 
 			// XXX: we ignore the error on purpose
 			// as the storage is not fsyncing, it could very well lose some updates
-			// also the data is not checksummed, so might very well be corrupted
+			// also the data is barely checksummed, so might very well be corrupted
 			if err == nil {
 				binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
 				w.Write(dataLenRaw)
