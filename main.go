@@ -139,8 +139,12 @@ func (this *MultiStore) find(storageIdentifier string) *Storage {
 	if !ok {
 		this.Lock()
 
-		storage = NewStorage(path.Join(this.root, storageIdentifier), this.nBuckets)
-		this.stores[storageIdentifier] = storage
+		storage, ok = this.stores[storageIdentifier]
+
+		if !ok {
+			storage = NewStorage(path.Join(this.root, storageIdentifier), this.nBuckets)
+			this.stores[storageIdentifier] = storage
+		}
 
 		this.Unlock()
 	}
