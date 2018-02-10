@@ -107,6 +107,6 @@ T: current time in nanosecond: 8 bytes
 C: crc32(length, time): 4 bytes
 V: the stored value
 
-DDDDTTTTTTTTCCCCVVVVVVVVVVVVVVVVVVVV
+DDDDTTTTTTTTCCCCVVVVVVVVVVVVVVVVVVVV...DDDDTTTTTTTTCCCCVVVVVV....
 
 ```
