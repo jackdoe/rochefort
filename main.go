@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
+	"hash/crc32"
 	"hash/fnv"
 	"io"
 	"io/ioutil"
@@ -65,21 +67,41 @@ func (this *Storage) read(sid string, offset int64) ([]byte, error) {
 	file.RLock()
 	defer file.RUnlock()
 
-	dataLenBytes := make([]byte, 4)
+	dataLenBytes := make([]byte, 4+8+4)
 	_, err := file.descriptor.ReadAt(dataLenBytes, offset)
 	if err != nil {
 		return nil, err
 	}
 
 	var dataLen uint32
+	var timeNano uint64
+	var checksum uint32
 	buf := bytes.NewReader(dataLenBytes)
 	err = binary.Read(buf, binary.LittleEndian, &dataLen)
 	if err != nil {
 		return nil, err
 	}
 
+	err = binary.Read(buf, binary.LittleEndian, &timeNano)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &checksum)
+	if err != nil {
+		return nil, err
+	}
+	checksumBytes := make([]byte, 4+8)
+	for i := 0; i < len(checksumBytes); i++ {
+		checksumBytes[i] = dataLenBytes[i]
+	}
+
+	if checksum != crc32.ChecksumIEEE(checksumBytes) {
+		return nil, errors.New("wrong checksum")
+	}
+
 	output := make([]byte, dataLen)
-	_, err = file.descriptor.ReadAt(output, offset+4)
+	_, err = file.descriptor.ReadAt(output, offset+int64(len(dataLenBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +121,23 @@ func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 		return -1, ""
 	}
 
-	dataLen := make([]byte, 4)
-	binary.LittleEndian.PutUint32(dataLen, uint32(len(b)))
+	buf := new(bytes.Buffer)
+	err = binary.Write(buf, binary.LittleEndian, uint32(len(b)))
+	if err != nil {
+		return -1, ""
+	}
 
-	written, err := file.descriptor.Write(dataLen)
+	err = binary.Write(buf, binary.LittleEndian, uint64(time.Now().UnixNano()))
+	if err != nil {
+		return -1, ""
+	}
+	checksum := crc32.ChecksumIEEE(buf.Bytes())
+	err = binary.Write(buf, binary.LittleEndian, uint32(checksum))
+	if err != nil {
+		return -1, ""
+	}
+
+	written, err := file.descriptor.Write(buf.Bytes())
 	if err != nil {
 		panic(err)
 	}
@@ -139,15 +174,13 @@ func (this *MultiStore) find(storageIdentifier string) *Storage {
 	this.RUnlock()
 	if !ok {
 		this.Lock()
-
+		defer this.Unlock()
 		storage, ok = this.stores[storageIdentifier]
 
 		if !ok {
 			storage = NewStorage(path.Join(this.root, storageIdentifier), this.nBuckets)
 			this.stores[storageIdentifier] = storage
 		}
-
-		this.Unlock()
 	}
 	return storage
 }
