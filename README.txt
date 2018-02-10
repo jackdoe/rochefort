@@ -6,16 +6,8 @@ no shenanigans
 * curl url/identifier returns offset and the file it was added to
 
 $ go run main.go -buckets 10 -bind :8001
-2018/02/09 23:26:17 openning: /tmp/append.0.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.1.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.2.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.3.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.4.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.5.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.6.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.7.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.8.raw with offset: 0
-2018/02/09 23:26:17 openning: /tmp/append.9.raw with offset: 0
+2018/02/10 12:06:21 starting http server on :8001
+....
 
 
 STORE post /append?id=some_identifier returns {"offset":0,"file":"/tmp/append.3.raw"}

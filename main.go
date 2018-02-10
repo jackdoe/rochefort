@@ -251,7 +251,7 @@ func main() {
 			}
 		}
 	})
-
+	log.Printf("starting http server on %s", *pbind)
 	err := http.ListenAndServe(*pbind, nil)
 	if err != nil {
 		log.Fatal(err)
