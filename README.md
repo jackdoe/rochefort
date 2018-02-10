@@ -1,15 +1,22 @@
-# rochefort -PUSH DATA, GET FILE OFFSET; no shenanigans
+# rochefort - PUSH DATA, GET FILE OFFSET; no shenanigans
 ---
 
 * run the service
 * curl url/identifier returns offset and the file it was added to
 * not very safe, it just closes the file descriptors on sigterm/sigint use at your own risk
-
+* operations: append/get/multiget/close
 
 ```
-$ go run main.go -buckets 10 -bind :8001
+$ go run main.go -buckets 10 -bind :8001 -root /tmp
 2018/02/10 12:06:21 starting http server on :8001
 ....
+
+
+### parameters
+* buckets: number of filers per storagePrefix
+* root: root directory, files will be created at
+`root/storagePrefix||default/append.%d.raw`
+* bind: address to bind to
 
 ```
 
