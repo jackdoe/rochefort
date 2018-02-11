@@ -96,11 +96,6 @@ func readHeader(file *os.File, offset uint64) (uint32, error) {
 
 	checksum := binary.LittleEndian.Uint32(headerBytes[12:])
 
-	checksumBytes := make([]byte, 12)
-	for i := 0; i < len(checksumBytes); i++ {
-		checksumBytes[i] = headerBytes[i]
-	}
-
 	if checksum != crc(headerBytes[0:12]) {
 		return 0, errors.New("wrong checksum")
 	}
