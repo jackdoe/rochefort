@@ -4,6 +4,8 @@ import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
@@ -13,7 +15,7 @@ import static nl.prymr.rochefort.Util.convertStreamToString;
 import static nl.prymr.rochefort.Util.readFully;
 
 public class Client {
-  private String urlGetMulti, urlGet, urlAppend;
+  private String urlGetMulti, urlGet, urlAppend, urlScan;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -35,6 +37,7 @@ public class Client {
     this.urlGet = prefix + "get";
     this.urlGetMulti = prefix + "getMulti";
     this.urlAppend = prefix + "append";
+    this.urlScan = prefix + "scan";
   }
 
   public static long append(String urlSet, String storagePrefix, String id, byte[] data)
@@ -129,6 +132,42 @@ public class Client {
     return out;
   }
 
+  public static void scan(String urlGetScan, String storagePrefix, ScanConsumer consumer)
+      throws Exception {
+
+    HttpResponse<InputStream> response =
+        Unirest.get(urlGetScan).queryString("storagePrefix", storagePrefix).asBinary();
+
+    if (response.getStatus() != 200) {
+      throw new Exception(
+          "status code "
+              + response.getStatus()
+              + " url: "
+              + urlGetScan
+              + "storagePrefix: "
+              + storagePrefix
+              + " body: "
+              + convertStreamToString(response.getRawBody()));
+    }
+    byte[] buffer = new byte[65535];
+    byte[] header = new byte[12];
+    DataInputStream is = new DataInputStream(response.getRawBody());
+
+    while (true) {
+      try {
+        is.readFully(header, 0, header.length);
+      } catch (EOFException e) {
+        break;
+      }
+      int len = Util.aByteToInt(header, 0);
+      if (buffer.length < len) {
+        buffer = new byte[len * 2];
+      }
+      is.readFully(buffer, 0, len);
+      consumer.accept(buffer, len);
+    }
+  }
+
   public long append(String id, byte[] data) throws Exception {
     return append("", id, data);
   }
@@ -159,5 +198,17 @@ public class Client {
 
   public List<byte[]> getMulti(String storagePrefix, byte[] encodedListOfOffsets) throws Exception {
     return getMulti(this.urlGetMulti, storagePrefix, encodedListOfOffsets);
+  }
+
+  public void scan(ScanConsumer consumer) throws Exception {
+    scan(this.urlScan, "", consumer);
+  }
+
+  public void scan(String storagePrefix, ScanConsumer consumer) throws Exception {
+    scan(this.urlScan, storagePrefix, consumer);
+  }
+
+  public abstract static class ScanConsumer {
+    public abstract void accept(byte[] buffer, int length);
   }
 }

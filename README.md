@@ -133,7 +133,7 @@ $ curl http://localhost:8000/scan?storagePrefix=someStoragePrefix > dump.txt
 ```
 
 the format is
-[len]data[len]data...[len]data..
+[len 4 bytes(little endian)][offset 8 bytes little endian)]data...[len][offset]data
 
 
 ## LICENSE

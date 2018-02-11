@@ -31,7 +31,6 @@ public class ClientTest extends TestCase {
     Random random = new Random(System.currentTimeMillis());
     for (int attempt = 0; attempt < 5; attempt++) {
       for (String storagePrefix : new String[] {"", "some-very-long-name", "example"}) {
-
         List<byte[]> everything = new ArrayList<>();
         List<Long> allOffsets = new ArrayList<>();
 
@@ -89,12 +88,21 @@ public class ClientTest extends TestCase {
         for (int i = 0; i < everything.size(); i++) {
           assertTrue(Arrays.equals(everything.get(i), fetched.get(i)));
         }
+
+        client.scan(
+            storagePrefix,
+            new Client.ScanConsumer() {
+              @Override
+              public void accept(byte[] buffer, int length) {
+                // ignore, just make sure it works
+              }
+            });
       }
     }
   }
 
   public void testManyAsync() throws Exception {
-    int threadCount = 20;
+    int threadCount = 5;
     Callable<Long> task =
         new Callable<Long>() {
           @Override

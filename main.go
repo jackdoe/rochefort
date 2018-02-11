@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -59,8 +58,8 @@ func NewStorage(root string, n int) *Storage {
 	return storage
 }
 
-func (this *Storage) scan(cb func(uint32, []byte)) {
-	for _, f := range this.files {
+func (this *Storage) scan(cb func(uint32, uint64, []byte)) {
+	for fileIdx, f := range this.files {
 	SCAN:
 		for offset := int64(0); offset < f.offset; {
 			dataLen, err := readHeader(f.descriptor, uint64(offset))
@@ -75,7 +74,7 @@ func (this *Storage) scan(cb func(uint32, []byte)) {
 				}
 
 			}
-			cb(dataLen, output)
+			cb(dataLen, encodedOffset(fileIdx, offset), output)
 			offset += int64(dataLen + headerLen)
 		}
 	}
@@ -128,13 +127,14 @@ func (this *Storage) read(offset uint64) (uint32, []byte, error) {
 
 func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) {
 	id := hash(sid)
-	fileIndex := uint32(id % uint32(len(this.files)))
+	fileIndex := int(id % uint32(len(this.files)))
 	file := this.files[fileIndex]
 
 	file.Lock()
 	defer file.Unlock()
 
 	currentOffset := file.offset
+
 	b, err := ioutil.ReadAll(data)
 	if err != nil {
 		return 0, "", err
@@ -158,9 +158,12 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	}
 	file.offset += int64(written)
 
-	return (uint64(fileIndex) << uint64(50)) | uint64(currentOffset), file.path, nil
+	return encodedOffset(fileIndex, currentOffset), file.path, nil
 }
 
+func encodedOffset(fileIndex int, offset int64) uint64 {
+	return (uint64(fileIndex) << uint64(50)) | uint64(offset)
+}
 func hash(s string) uint32 {
 	return uint32(metro.Hash64Str(s, 0) >> uint64(32))
 }
@@ -221,7 +224,7 @@ func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, [
 	return this.find(storageIdentifier).read(offset)
 }
 
-func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, []byte)) {
+func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, uint64, []byte)) {
 	this.find(storageIdentifier).scan(cb)
 }
 
@@ -311,11 +314,12 @@ func main() {
 	http.HandleFunc("/scan", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 
-		dataLenRaw := make([]byte, 4)
-		multiStore.scan(r.URL.Query().Get(storagePrefixKey), func(dataLen uint32, data []byte) {
-			binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-			w.Write(dataLenRaw)
+		header := make([]byte, 12)
+		multiStore.scan(r.URL.Query().Get(storagePrefixKey), func(dataLen uint32, offset uint64, data []byte) {
+			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
+			binary.LittleEndian.PutUint64(header[4:], offset)
 
+			w.Write(header)
 			w.Write(data)
 		})
 	})
@@ -330,11 +334,9 @@ func main() {
 			w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
 			return
 		}
-		buf := bytes.NewReader(b)
 		storagePrefix := r.URL.Query().Get(storagePrefixKey)
-		for i := 0; i < len(b)/8; i++ {
-			var offset uint64
-			err = binary.Read(buf, binary.LittleEndian, &offset)
+		for i := 0; i < len(b); i += 8 {
+			offset := binary.LittleEndian.Uint64(b[i:])
 			_, data, err := multiStore.read(storagePrefix, offset)
 
 			// XXX: we ignore the error on purpose
