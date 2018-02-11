@@ -160,11 +160,12 @@ public class Client {
         break;
       }
       int len = Util.aByteToInt(header, 0);
+      long offset = Util.abyteToLong(header, 4);
       if (buffer.length < len) {
         buffer = new byte[len * 2];
       }
       is.readFully(buffer, 0, len);
-      consumer.accept(buffer, len);
+      consumer.accept(buffer, len, offset);
     }
   }
 
@@ -209,6 +210,6 @@ public class Client {
   }
 
   public abstract static class ScanConsumer {
-    public abstract void accept(byte[] buffer, int length);
+    public abstract void accept(byte[] buffer, int length, long rochefortOffset);
   }
 }

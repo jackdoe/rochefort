@@ -6,12 +6,11 @@ import junit.framework.TestSuite;
 
 import java.io.ByteArrayOutputStream;
 import java.util.*;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 public class ClientTest extends TestCase {
+  public static final String[] prefixes = new String[] {"", "some-very-long-name", "example"};
+  public static Map<String, Map<Long, byte[]>> lookupAllOffsets = new ConcurrentHashMap<>();
   Client client;
 
   public ClientTest(String testName) {
@@ -25,12 +24,27 @@ public class ClientTest extends TestCase {
   @Override
   public void setUp() throws Exception {
     client = new Client(System.getenv("ROCHEFORT_TEST_HOST"));
+    for (final String s : prefixes) {
+      lookupAllOffsets.put(s, new ConcurrentHashMap<Long, byte[]>());
+      client.scan(
+          s,
+          new Client.ScanConsumer() {
+            @Override
+            public void accept(byte[] buffer, int length, long offset) {
+              byte[] tmp = Arrays.copyOf(buffer, length);
+              lookupAllOffsets.get(s).put(offset, tmp);
+            }
+          });
+    }
   }
 
   public void testApp() throws Exception {
     Random random = new Random(System.currentTimeMillis());
-    for (int attempt = 0; attempt < 5; attempt++) {
-      for (String storagePrefix : new String[] {"", "some-very-long-name", "example"}) {
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+
+      for (final String storagePrefix : prefixes) {
+
         List<byte[]> everything = new ArrayList<>();
         List<Long> allOffsets = new ArrayList<>();
 
@@ -43,6 +57,7 @@ public class ClientTest extends TestCase {
                 1, 1, 1, 1, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
                 10, 10, 1000, 1000, 10000, 100000, 1000000
               }) {
+
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             for (int i = 0; i < size; i++) {
               bos.write(random.nextInt());
@@ -53,6 +68,10 @@ public class ClientTest extends TestCase {
             long offset = client.append(storagePrefix, id, data);
             offsets.add(offset);
             stored.add(data);
+
+            // make sure we never get the same offset twice
+            assertNull("we already have offset " + offset, lookupAllOffsets.get(offset));
+            lookupAllOffsets.get(storagePrefix).put(offset, data);
 
             byte[] fetchedData = client.get(storagePrefix, offset);
             assertTrue(
@@ -70,6 +89,7 @@ public class ClientTest extends TestCase {
             for (int i = 0; i < offsets.size(); i++) loffsets[i] = offsets.get(i);
             List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
 
+            assertFalse(stored.size() == 0);
             assertEquals(stored.size(), fetched.size());
             for (int i = 0; i < stored.size(); i++) {
               assertTrue(Arrays.equals(stored.get(i), fetched.get(i)));
@@ -84,19 +104,34 @@ public class ClientTest extends TestCase {
         for (int i = 0; i < allOffsets.size(); i++) loffsets[i] = allOffsets.get(i);
         List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
 
+        assertFalse(fetched.size() == 0);
         assertEquals(everything.size(), fetched.size());
         for (int i = 0; i < everything.size(); i++) {
           assertTrue(Arrays.equals(everything.get(i), fetched.get(i)));
         }
+      }
 
-        client.scan(
-            storagePrefix,
-            new Client.ScanConsumer() {
-              @Override
-              public void accept(byte[] buffer, int length) {
-                // ignore, just make sure it works
-              }
-            });
+      synchronized (ClientTest.class) {
+        // no insert while we are scanning, because otherwise we cant verify everything is 100% in
+        // place
+        for (final String storagePrefix : prefixes) {
+          client.scan(
+              storagePrefix,
+              new Client.ScanConsumer() {
+                @Override
+                public void accept(byte[] buffer, int length, long offset) {
+                  assertNotNull(
+                      "missing offset " + offset, lookupAllOffsets.get(storagePrefix).get(offset));
+                  byte[] tmp = Arrays.copyOf(buffer, length);
+                  byte[] stored = lookupAllOffsets.get(storagePrefix).get(offset);
+                  assertTrue(
+                      String.format(
+                          "offset: %d expected: %s got %s",
+                          offset, Arrays.toString(tmp), Arrays.toString(stored)),
+                      Arrays.equals(tmp, stored));
+                }
+              });
+        }
       }
     }
   }
