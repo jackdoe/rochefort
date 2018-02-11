@@ -1,10 +1,9 @@
 # rochefort - PUSH DATA, GET FILE OFFSET; no shenanigans
 ---
-
-* run the service
-* curl url/identifier returns offset and the file it was added to
-* not very safe, it just closes the file descriptors on sigterm/sigint use at your own risk
-* operations: append/get/multiget/close
+* **disk write speed** storage service that returns offsets to stored values
+* if you are ok with losing some data (does not fsync on write)
+* supports: **append, get, multiget, close**
+* clients: java, curl
 
 ```
 $ go run main.go -buckets 10 -bind :8001 -root /tmp
@@ -97,7 +96,7 @@ you can also pass "storagePrefix" parameter and this will create different direc
 and then you simply delete the directories you dont need
 
 ## CLOSE
-method get closes storagePrefix so it can be deleted
+Closes storagePrefix so it can be deleted
 
 ```
 $ curl http://localhost:8000/close?storagePrefix=events_from_20171112
