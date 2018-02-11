@@ -121,7 +121,7 @@ func readHeader(file *os.File, offset uint64) (uint32, error) {
 }
 
 func (this *Storage) read(offset uint64) (uint32, []byte, error) {
-	fileIndex := offset >> 48
+	fileIndex := offset >> 50
 	offset = offset & 0x0000FFFFFFFFFFFF
 	if fileIndex > uint64(len(this.files)-1) {
 		return 0, nil, errors.New("wrong offset, index > open files")
@@ -186,7 +186,7 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	}
 	file.offset += int64(written)
 
-	return (uint64(fileIndex) << uint64(48)) | uint64(currentOffset), file.path, nil
+	return (uint64(fileIndex) << uint64(50)) | uint64(currentOffset), file.path, nil
 }
 
 func hash(s string) uint32 {
@@ -273,8 +273,8 @@ func main() {
 	var proot = flag.String("root", "/tmp", "root directory")
 	flag.Parse()
 
-	if *pnBuckets > 2047 {
-		log.Fatalf("buckets can be at most 2047, we store them in 11 bits (returned offsets are bucket << 48 | offset)")
+	if *pnBuckets > 8191 {
+		log.Fatalf("buckets can be at most 8191, we store them in 13 bits (returned offsets are bucket << 50 | offset)")
 		os.Exit(1)
 	}
 
