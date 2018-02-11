@@ -25,13 +25,6 @@ public class ClientTest extends TestCase {
   @Override
   public void setUp() throws Exception {
     client = new Client(System.getenv("ROCHEFORT_TEST_HOST"));
-    String s = "";
-    for (byte b :
-        Util.listOfLongsToBytes(
-            new long[] {14636698788954137L, 14636698788954112L, 14636698788954137L})) {
-      s += String.format("\\x%02x", b & 0xFF);
-    }
-    throw new RuntimeException(s);
   }
 
   public void testApp() throws Exception {

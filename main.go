@@ -6,8 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"hash/crc32"
-	"hash/fnv"
+	"github.com/dgryski/go-metro"
 	"io"
 	"io/ioutil"
 	"log"
@@ -85,36 +84,24 @@ func (this *Storage) scan(cb func(uint32, []byte)) {
 const headerLen = 4 + 8 + 4
 
 func readHeader(file *os.File, offset uint64) (uint32, error) {
-	dataLenBytes := make([]byte, headerLen)
-	_, err := file.ReadAt(dataLenBytes, int64(offset))
+	headerBytes := make([]byte, headerLen)
+	_, err := file.ReadAt(headerBytes, int64(offset))
 	if err != nil {
 		return 0, err
 	}
+	dataLen := binary.LittleEndian.Uint32(headerBytes[0:])
 
-	var dataLen uint32
-	var timeNano uint64
-	var checksum uint32
-	buf := bytes.NewReader(dataLenBytes)
-	err = binary.Read(buf, binary.LittleEndian, &dataLen)
-	if err != nil {
-		return 0, err
-	}
+	// no need for it
+	// timeNano := binary.LittleEndian.Uint64(headerBytes[4:])
 
-	err = binary.Read(buf, binary.LittleEndian, &timeNano)
-	if err != nil {
-		return 0, err
-	}
+	checksum := binary.LittleEndian.Uint32(headerBytes[12:])
 
-	err = binary.Read(buf, binary.LittleEndian, &checksum)
-	if err != nil {
-		return 0, err
-	}
-	checksumBytes := make([]byte, 4+8)
+	checksumBytes := make([]byte, 12)
 	for i := 0; i < len(checksumBytes); i++ {
-		checksumBytes[i] = dataLenBytes[i]
+		checksumBytes[i] = headerBytes[i]
 	}
 
-	if checksum != crc32.ChecksumIEEE(checksumBytes) {
+	if checksum != crc(headerBytes[0:12]) {
 		return 0, errors.New("wrong checksum")
 	}
 	return dataLen, nil
@@ -157,24 +144,14 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	if err != nil {
 		return 0, "", err
 	}
+	header := make([]byte, headerLen)
+	binary.LittleEndian.PutUint32(header[0:], uint32(len(b)))
+	binary.LittleEndian.PutUint64(header[4:], uint64(time.Now().UnixNano()))
 
-	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, uint32(len(b)))
-	if err != nil {
-		return 0, "", err
-	}
+	checksum := crc(header[0:12])
+	binary.LittleEndian.PutUint32(header[12:], checksum)
 
-	err = binary.Write(buf, binary.LittleEndian, uint64(time.Now().UnixNano()))
-	if err != nil {
-		return 0, "", err
-	}
-	checksum := crc32.ChecksumIEEE(buf.Bytes())
-	err = binary.Write(buf, binary.LittleEndian, uint32(checksum))
-	if err != nil {
-		return 0, "", err
-	}
-
-	written, err := file.descriptor.Write(buf.Bytes())
+	written, err := file.descriptor.Write(header)
 	if err != nil {
 		panic(err)
 	}
@@ -190,9 +167,11 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 }
 
 func hash(s string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return h.Sum32()
+	return uint32(metro.Hash64Str(s, 0) >> uint64(32))
+}
+
+func crc(b []byte) uint32 {
+	return uint32(metro.Hash64(b, 0) >> uint64(32))
 }
 
 type MultiStore struct {
@@ -275,7 +254,6 @@ func main() {
 
 	if *pnBuckets > 8191 {
 		log.Fatalf("buckets can be at most 8191, we store them in 13 bits (returned offsets are bucket << 50 | offset)")
-		os.Exit(1)
 	}
 
 	multiStore := &MultiStore{
