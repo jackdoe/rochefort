@@ -31,11 +31,14 @@ public class ClientTest extends TestCase {
     Random random = new Random(System.currentTimeMillis());
     for (int attempt = 0; attempt < 5; attempt++) {
       for (String storagePrefix : new String[] {"", "some-very-long-name", "example"}) {
+
+        List<byte[]> everything = new ArrayList<>();
+        List<Long> allOffsets = new ArrayList<>();
+
         for (String id : new String[] {"abc", "abcd", "abcdef"}) {
           id = id + random.nextFloat();
           List<Long> offsets = new ArrayList<Long>();
           List<byte[]> stored = new ArrayList<byte[]>();
-
           for (int size :
               new int[] {
                 1, 1, 1, 1, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
@@ -52,7 +55,7 @@ public class ClientTest extends TestCase {
             offsets.add(offset);
             stored.add(data);
 
-            byte[] fetchedData = client.get(storagePrefix, id, offset);
+            byte[] fetchedData = client.get(storagePrefix, offset);
             assertTrue(
                 String.format(
                     "storagePrefix:%s id:%s size: %d offset: %d expected: %s got %s",
@@ -66,13 +69,25 @@ public class ClientTest extends TestCase {
 
             long[] loffsets = new long[offsets.size()];
             for (int i = 0; i < offsets.size(); i++) loffsets[i] = offsets.get(i);
-            List<byte[]> fetched = client.getMulti(storagePrefix, id, loffsets);
+            List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
 
             assertEquals(stored.size(), fetched.size());
             for (int i = 0; i < stored.size(); i++) {
               assertTrue(Arrays.equals(stored.get(i), fetched.get(i)));
             }
           }
+
+          everything.addAll(stored);
+          allOffsets.addAll(offsets);
+        }
+
+        long[] loffsets = new long[allOffsets.size()];
+        for (int i = 0; i < allOffsets.size(); i++) loffsets[i] = allOffsets.get(i);
+        List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
+
+        assertEquals(everything.size(), fetched.size());
+        for (int i = 0; i < everything.size(); i++) {
+          assertTrue(Arrays.equals(everything.get(i), fetched.get(i)));
         }
       }
     }

@@ -60,16 +60,14 @@ public class Client {
   }
 
   public static List<byte[]> getMulti(
-      String urlGetMulti, String storagePrefix, String id, long[] listOfOffsets) throws Exception {
-    return getMulti(urlGetMulti, storagePrefix, id, Util.listOfLongsToBytes(listOfOffsets));
+      String urlGetMulti, String storagePrefix, long[] listOfOffsets) throws Exception {
+    return getMulti(urlGetMulti, storagePrefix, Util.listOfLongsToBytes(listOfOffsets));
   }
 
-  public static byte[] get(String urlGet, String storagePrefix, String id, long offset)
-      throws Exception {
+  public static byte[] get(String urlGet, String storagePrefix, long offset) throws Exception {
     HttpResponse<InputStream> response =
         Unirest.get(urlGet)
             .queryString("storagePrefix", storagePrefix)
-            .queryString("id", id)
             .queryString("offset", offset)
             .asBinary();
     if (response.getStatus() != 200) {
@@ -88,12 +86,10 @@ public class Client {
   }
 
   public static List<byte[]> getMulti(
-      String urlGetMulti, String storagePrefix, String id, byte[] encodedListOfOffsets)
-      throws Exception {
+      String urlGetMulti, String storagePrefix, byte[] encodedListOfOffsets) throws Exception {
 
     HttpResponse<InputStream> response =
         Unirest.post(urlGetMulti)
-            .queryString("id", id)
             .queryString("storagePrefix", storagePrefix)
             .body(encodedListOfOffsets)
             .asBinary();
@@ -141,29 +137,27 @@ public class Client {
     return append(this.urlAppend, storagePrefix, id, data);
   }
 
-  public byte[] get(String id, long offset) throws Exception {
-    return get("", id, offset);
+  public byte[] get(long offset) throws Exception {
+    return get("", offset);
   }
 
-  public byte[] get(String storagePrefix, String id, long offset) throws Exception {
-    return get(this.urlGet, storagePrefix, id, offset);
+  public byte[] get(String storagePrefix, long offset) throws Exception {
+    return get(this.urlGet, storagePrefix, offset);
   }
 
-  public List<byte[]> getMulti(String id, long[] listOfOffsets) throws Exception {
-    return getMulti("", id, listOfOffsets);
+  public List<byte[]> getMulti(long[] listOfOffsets) throws Exception {
+    return getMulti("", listOfOffsets);
   }
 
-  public List<byte[]> getMulti(String id, byte[] encodedListOfOffsets) throws Exception {
-    return getMulti("", id, encodedListOfOffsets);
+  public List<byte[]> getMulti(byte[] encodedListOfOffsets) throws Exception {
+    return getMulti("", encodedListOfOffsets);
   }
 
-  public List<byte[]> getMulti(String storagePrefix, String id, long[] listOfOffsets)
-      throws Exception {
-    return getMulti(this.urlGetMulti, storagePrefix, id, listOfOffsets);
+  public List<byte[]> getMulti(String storagePrefix, long[] listOfOffsets) throws Exception {
+    return getMulti(this.urlGetMulti, storagePrefix, listOfOffsets);
   }
 
-  public List<byte[]> getMulti(String storagePrefix, String id, byte[] encodedListOfOffsets)
-      throws Exception {
-    return getMulti(this.urlGetMulti, storagePrefix, id, encodedListOfOffsets);
+  public List<byte[]> getMulti(String storagePrefix, byte[] encodedListOfOffsets) throws Exception {
+    return getMulti(this.urlGetMulti, storagePrefix, encodedListOfOffsets);
   }
 }

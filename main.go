@@ -60,17 +60,35 @@ func NewStorage(root string, n int) *Storage {
 	return storage
 }
 
-func (this *Storage) read(sid string, offset int64) ([]byte, error) {
-	id := hash(sid)
-	file := this.files[id%uint32(len(this.files))]
+func (this *Storage) scan(cb func(uint32, []byte)) {
+	for _, f := range this.files {
+	SCAN:
+		for offset := int64(0); offset < f.offset; {
+			dataLen, err := readHeader(f.descriptor, uint64(offset))
+			if err != nil {
+				break SCAN
+			}
+			output := make([]byte, dataLen)
+			_, err = f.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
+			if err != nil {
+				if err != nil {
+					break SCAN
+				}
 
-	file.RLock()
-	defer file.RUnlock()
+			}
+			cb(dataLen, output)
+			offset += int64(dataLen + headerLen)
+		}
+	}
+}
 
-	dataLenBytes := make([]byte, 4+8+4)
-	_, err := file.descriptor.ReadAt(dataLenBytes, offset)
+const headerLen = 4 + 8 + 4
+
+func readHeader(file *os.File, offset uint64) (uint32, error) {
+	dataLenBytes := make([]byte, headerLen)
+	_, err := file.ReadAt(dataLenBytes, int64(offset))
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	var dataLen uint32
@@ -79,17 +97,17 @@ func (this *Storage) read(sid string, offset int64) ([]byte, error) {
 	buf := bytes.NewReader(dataLenBytes)
 	err = binary.Read(buf, binary.LittleEndian, &dataLen)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	err = binary.Read(buf, binary.LittleEndian, &timeNano)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	err = binary.Read(buf, binary.LittleEndian, &checksum)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	checksumBytes := make([]byte, 4+8)
 	for i := 0; i < len(checksumBytes); i++ {
@@ -97,20 +115,39 @@ func (this *Storage) read(sid string, offset int64) ([]byte, error) {
 	}
 
 	if checksum != crc32.ChecksumIEEE(checksumBytes) {
-		return nil, errors.New("wrong checksum")
+		return 0, errors.New("wrong checksum")
+	}
+	return dataLen, nil
+}
+
+func (this *Storage) read(offset uint64) (uint32, []byte, error) {
+	fileIndex := offset >> 48
+	offset = offset & 0x0000FFFFFFFFFFFF
+	if fileIndex > uint64(len(this.files)-1) {
+		return 0, nil, errors.New("wrong offset, index > open files")
+	}
+	file := this.files[fileIndex]
+
+	file.RLock()
+	defer file.RUnlock()
+
+	dataLen, err := readHeader(file.descriptor, offset)
+	if err != nil {
+		return 0, nil, err
 	}
 
 	output := make([]byte, dataLen)
-	_, err = file.descriptor.ReadAt(output, offset+int64(len(dataLenBytes)))
+	_, err = file.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
-	return output, nil
+	return dataLen, output, nil
 }
 
-func (this *Storage) append(sid string, data io.Reader) (int64, string) {
+func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) {
 	id := hash(sid)
-	file := this.files[id%uint32(len(this.files))]
+	fileIndex := uint32(id % uint32(len(this.files)))
+	file := this.files[fileIndex]
 
 	file.Lock()
 	defer file.Unlock()
@@ -118,23 +155,23 @@ func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 	currentOffset := file.offset
 	b, err := ioutil.ReadAll(data)
 	if err != nil {
-		return -1, ""
+		return 0, "", err
 	}
 
 	buf := new(bytes.Buffer)
 	err = binary.Write(buf, binary.LittleEndian, uint32(len(b)))
 	if err != nil {
-		return -1, ""
+		return 0, "", err
 	}
 
 	err = binary.Write(buf, binary.LittleEndian, uint64(time.Now().UnixNano()))
 	if err != nil {
-		return -1, ""
+		return 0, "", err
 	}
 	checksum := crc32.ChecksumIEEE(buf.Bytes())
 	err = binary.Write(buf, binary.LittleEndian, uint32(checksum))
 	if err != nil {
-		return -1, ""
+		return 0, "", err
 	}
 
 	written, err := file.descriptor.Write(buf.Bytes())
@@ -149,7 +186,7 @@ func (this *Storage) append(sid string, data io.Reader) (int64, string) {
 	}
 	file.offset += int64(written)
 
-	return currentOffset, file.path
+	return (uint64(fileIndex) << uint64(48)) | uint64(currentOffset), file.path, nil
 }
 
 func hash(s string) uint32 {
@@ -202,13 +239,18 @@ func (this *MultiStore) close(storageIdentifier string) {
 	delete(this.stores, storageIdentifier)
 }
 
-func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (int64, string) {
+func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (uint64, string, error) {
 	return this.find(storageIdentifier).append(sid, data)
 }
 
-func (this *MultiStore) read(storageIdentifier, sid string, offset int64) ([]byte, error) {
-	return this.find(storageIdentifier).read(sid, offset)
+func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, []byte, error) {
+	return this.find(storageIdentifier).read(offset)
 }
+
+func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, []byte)) {
+	this.find(storageIdentifier).scan(cb)
+}
+
 func makeTimestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
 }
@@ -230,6 +272,11 @@ func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp", "root directory")
 	flag.Parse()
+
+	if *pnBuckets > 2047 {
+		log.Fatalf("buckets can be at most 2047, we store them in 11 bits (returned offsets are bucket << 48 | offset)")
+		os.Exit(1)
+	}
 
 	multiStore := &MultiStore{
 		stores:   make(map[string]*Storage),
@@ -256,31 +303,52 @@ func main() {
 
 	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
 		multiStore.close(r.URL.Query().Get(storagePrefixKey))
+		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("{\"success\":true}"))
 	})
 
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		offset, file := multiStore.append(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), r.Body)
-		w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
-	})
-
-	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
-		offset, err := strconv.ParseInt(r.URL.Query().Get(offsetKey), 10, 64)
+		offset, file, err := multiStore.append(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), offset)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
+		}
+	})
+
+	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+		offset, err := strconv.ParseUint(r.URL.Query().Get(offsetKey), 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			_, data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), offset)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
 			} else {
+				w.Header().Set("Content-Type", "application/octet-stream")
 				w.Write(data)
 			}
 		}
 	})
 
+	http.HandleFunc("/scan", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+
+		dataLenRaw := make([]byte, 4)
+		multiStore.scan(r.URL.Query().Get(storagePrefixKey), func(dataLen uint32, data []byte) {
+			binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
+			w.Write(dataLenRaw)
+
+			w.Write(data)
+		})
+	})
+
 	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
 		dataLenRaw := make([]byte, 4)
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
@@ -290,10 +358,11 @@ func main() {
 			return
 		}
 		buf := bytes.NewReader(b)
+		storagePrefix := r.URL.Query().Get(storagePrefixKey)
 		for i := 0; i < len(b)/8; i++ {
 			var offset uint64
 			err = binary.Read(buf, binary.LittleEndian, &offset)
-			data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), int64(offset))
+			_, data, err := multiStore.read(storagePrefix, offset)
 
 			// XXX: we ignore the error on purpose
 			// as the storage is not fsyncing, it could very well lose some updates
