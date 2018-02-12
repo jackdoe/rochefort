@@ -125,37 +125,36 @@ func (this *Storage) read(offset uint64) (uint32, []byte, error) {
 }
 
 func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) {
+	dataRaw, err := ioutil.ReadAll(data)
+	if err != nil {
+		return 0, "", err
+	}
+
 	id := hash(sid)
 	fileIndex := int(id % uint32(len(this.files)))
 	file := this.files[fileIndex]
 
 	file.Lock()
-	defer file.Unlock()
-
 	currentOffset := file.offset
+	file.offset += int64(len(dataRaw) + headerLen)
+	file.Unlock()
 
-	b, err := ioutil.ReadAll(data)
-	if err != nil {
-		return 0, "", err
-	}
 	header := make([]byte, headerLen)
-	binary.LittleEndian.PutUint32(header[0:], uint32(len(b)))
+	binary.LittleEndian.PutUint32(header[0:], uint32(len(dataRaw)))
 	binary.LittleEndian.PutUint64(header[4:], uint64(time.Now().UnixNano()))
 
 	checksum := crc(header[0:12])
 	binary.LittleEndian.PutUint32(header[12:], checksum)
 
-	written, err := file.descriptor.Write(header)
+	_, err = file.descriptor.WriteAt(header, currentOffset)
 	if err != nil {
 		panic(err)
 	}
-	file.offset += int64(written)
 
-	written, err = file.descriptor.Write(b)
+	_, err = file.descriptor.WriteAt(dataRaw, currentOffset+headerLen)
 	if err != nil {
 		panic(err)
 	}
-	file.offset += int64(written)
 
 	return encodedOffset(fileIndex, currentOffset), file.path, nil
 }
