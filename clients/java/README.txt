@@ -2,7 +2,7 @@ java client rochefort
 
 install:
 
-  cd client && mvn install
+  mvn install
 
 example usage:
 
@@ -15,7 +15,7 @@ example usage:
   long offset = client.append("exampleKey", new byte[]{0,1,2,3,4,5});
 
   // fetches data for "exampleKey" with the appropriate offset
-  byte[] data = client.get("exampleKey",offset);
+  byte[] data = client.get(offset);
   // data is now new byte[]{0,1,2,3,4,5}
 
 enjoy
