@@ -9,13 +9,13 @@ example usage:
   import nl.prymr.rochefort.Client;
 
   // the client is threadsafe, so make only 1 
-  public static final Client client = new Client("http://localhost:8000");
+  public static final Client rochefort = new Client("http://localhost:8000");
 
   // stores data for "exampleKey"
-  long offset = client.append("exampleKey", new byte[]{0,1,2,3,4,5});
+  long offset = rochefort.append("exampleKey", new byte[]{0,1,2,3,4,5});
 
   // fetches data for "exampleKey" with the appropriate offset
-  byte[] data = client.get(offset);
+  byte[] data = rochefort.get(offset);
   // data is now new byte[]{0,1,2,3,4,5}
 
 enjoy
