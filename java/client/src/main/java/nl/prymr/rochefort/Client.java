@@ -210,6 +210,6 @@ public class Client {
   }
 
   public abstract static class ScanConsumer {
-    public abstract void accept(byte[] buffer, int length, long rochefortOffset);
+    public abstract void accept(byte[] buffer, int length, long rochefortOffset) throws Exception;
   }
 }

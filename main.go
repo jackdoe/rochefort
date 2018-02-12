@@ -62,6 +62,9 @@ func (this *Storage) scan(cb func(uint32, uint64, []byte)) {
 	for fileIdx, f := range this.files {
 	SCAN:
 		for offset := int64(0); offset < f.offset; {
+			// this is lockless, which means we could read a header,
+			// but the data might be incomplete
+
 			dataLen, err := readHeader(f.descriptor, uint64(offset))
 			if err != nil {
 				break SCAN
@@ -69,11 +72,9 @@ func (this *Storage) scan(cb func(uint32, uint64, []byte)) {
 			output := make([]byte, dataLen)
 			_, err = f.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
 			if err != nil {
-				if err != nil {
-					break SCAN
-				}
-
+				break SCAN
 			}
+
 			cb(dataLen, encodedOffset(fileIdx, offset), output)
 			offset += int64(dataLen + headerLen)
 		}
@@ -102,15 +103,13 @@ func readHeader(file *os.File, offset uint64) (uint32, error) {
 }
 
 func (this *Storage) read(offset uint64) (uint32, []byte, error) {
+	// lockless read
 	fileIndex := offset >> 50
 	offset = offset & 0x0000FFFFFFFFFFFF
 	if fileIndex > uint64(len(this.files)-1) {
 		return 0, nil, errors.New("wrong offset, index > open files")
 	}
 	file := this.files[fileIndex]
-
-	file.RLock()
-	defer file.RUnlock()
 
 	dataLen, err := readHeader(file.descriptor, offset)
 	if err != nil {

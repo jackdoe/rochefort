@@ -55,7 +55,9 @@ public class ClientTest extends TestCase {
           for (int size :
               new int[] {
                 1, 1, 1, 1, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
-                10, 10, 1000, 1000, 10000, 100000, 1000000
+                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1000, 1000,
+                10000, 100000, 1000000
               }) {
 
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -137,7 +139,7 @@ public class ClientTest extends TestCase {
   }
 
   public void testManyAsync() throws Exception {
-    int threadCount = 5;
+    int threadCount = 20;
     Callable<Long> task =
         new Callable<Long>() {
           @Override
