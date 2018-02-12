@@ -56,6 +56,8 @@ public class ClientTest extends TestCase {
               new int[] {
                 1, 1, 1, 1, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
                 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
                 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1000, 1000,
                 10000, 100000, 1000000
               }) {
@@ -76,16 +78,17 @@ public class ClientTest extends TestCase {
             lookupAllOffsets.get(storagePrefix).put(offset, data);
 
             byte[] fetchedData = client.get(storagePrefix, offset);
-            assertTrue(
-                String.format(
-                    "storagePrefix:%s id:%s size: %d offset: %d expected: %s got %s",
-                    storagePrefix,
-                    id,
-                    size,
-                    offset,
-                    Arrays.toString(data),
-                    Arrays.toString(fetchedData)),
-                Arrays.equals(data, fetchedData));
+            //            assertTrue(
+            //                String.format(
+            //                    "storagePrefix:%s id:%s size: %d offset: %d expected: %s got %s",
+            //                    storagePrefix,
+            //                    id,
+            //                    size,
+            //                    offset,
+            //                    Arrays.toString(data),
+            //                    Arrays.toString(fetchedData)),
+            //                Arrays.equals(data, fetchedData));
+            assertTrue(Arrays.equals(data, fetchedData));
 
             long[] loffsets = new long[offsets.size()];
             for (int i = 0; i < offsets.size(); i++) loffsets[i] = offsets.get(i);
@@ -126,11 +129,12 @@ public class ClientTest extends TestCase {
                       "missing offset " + offset, lookupAllOffsets.get(storagePrefix).get(offset));
                   byte[] tmp = Arrays.copyOf(buffer, length);
                   byte[] stored = lookupAllOffsets.get(storagePrefix).get(offset);
-                  assertTrue(
-                      String.format(
-                          "offset: %d expected: %s got %s",
-                          offset, Arrays.toString(tmp), Arrays.toString(stored)),
-                      Arrays.equals(tmp, stored));
+                  //                  assertTrue(
+                  //                      String.format(
+                  //                          "offset: %d expected: %s got %s",
+                  //                          offset, Arrays.toString(tmp),Arrays.toString(stored)),
+                  //                      Arrays.equals(tmp, stored));
+                  assertTrue(Arrays.equals(tmp, stored));
                 }
               });
         }
