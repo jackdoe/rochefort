@@ -23,7 +23,7 @@ type StoreItem struct {
 	path       string
 	descriptor *os.File
 	offset     int64
-	sync.RWMutex
+	sync.Mutex
 }
 type Storage struct {
 	files []*StoreItem
