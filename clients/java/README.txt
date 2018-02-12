@@ -8,8 +8,8 @@ example usage:
 
   import nl.prymr.rochefort.Client;
 
-
-  Client client = new Client("http://localhost:8000");
+  // the client is threadsafe, so make only 1 
+  public static final Client client = new Client("http://localhost:8000");
 
   // stores data for "exampleKey"
   long offset = client.append("exampleKey", new byte[]{0,1,2,3,4,5});
