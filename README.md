@@ -5,19 +5,7 @@
 * supports: **append, get, multiget, close**
 * clients: java, curl
 
-```
-$ go run main.go -buckets 10 -bind :8001 -root /tmp
-2018/02/10 12:06:21 starting http server on :8001
-....
-
-```
-
-### parameters
-* buckets: number of filers per storagePrefix
-* root: root directory, files will be created at `root/storagePrefix||default/append.%d.raw`
-* bind: address to bind to
-
-### docker
+## run in docker
 
 run with docker: jackdoe/rochefort:0.1
 
@@ -29,7 +17,21 @@ docker run -e BUCKETS="10" \
            jackdoe/rochefort:0.1
 ```
 
+### parameters
+* buckets: number of filers per storagePrefix
+* root: root directory, files will be created at `root/storagePrefix||default/append.%d.raw`
+* bind: address to bind to
+
 dont forget to mount persisted root directory
+
+## compile from source
+
+```
+$ go run main.go -buckets 10 -bind :8001 -root /tmp
+2018/02/10 12:06:21 starting http server on :8001
+....
+
+```
 
 ## STORE
 
