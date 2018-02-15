@@ -8,7 +8,7 @@ class RochefortTest < Minitest::Unit::TestCase
       [nil,"atext","exam,ple"].each do |bucket|
         1.upto(10) do |id|
           1000.upto(1010) do |suffix|
-            r = Rochefort.new("http://localhost:8001")
+            r = Rochefort.new(url)
             data = "asdasd #{suffix}"
             offset = r.append(storage_prefix: bucket,id: id,data: data)
             fetched = r.get(storage_prefix: bucket, offset: offset)
