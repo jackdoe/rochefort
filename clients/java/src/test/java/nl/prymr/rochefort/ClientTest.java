@@ -30,6 +30,11 @@ public class ClientTest extends TestCase {
           s,
           new Client.ScanConsumer() {
             @Override
+            public int getReadTimeout() {
+              return 5000;
+            }
+
+            @Override
             public void accept(byte[] buffer, int length, long offset) {
               byte[] tmp = Arrays.copyOf(buffer, length);
               lookupAllOffsets.get(s).put(offset, tmp);

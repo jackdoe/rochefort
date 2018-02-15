@@ -7,6 +7,8 @@ import com.mashape.unirest.http.Unirest;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -134,38 +136,53 @@ public class Client {
 
   public static void scan(String urlGetScan, String storagePrefix, ScanConsumer consumer)
       throws Exception {
+    URL url = new URL((urlGetScan + "?storagePrefix=" + storagePrefix));
 
-    HttpResponse<InputStream> response =
-        Unirest.get(urlGetScan).queryString("storagePrefix", storagePrefix).asBinary();
+    // XXX: Unirest reads the whole body, which makes the scan useless
+    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-    if (response.getStatus() != 200) {
+    connection.setRequestMethod("GET");
+    connection.setDoOutput(false);
+    connection.setConnectTimeout(consumer.getConnectTimeout());
+    connection.setReadTimeout(consumer.getReadTimeout());
+    connection.setRequestProperty("Connection", "close");
+
+    InputStream inputStream = null;
+    InputStreamReader reader = null;
+
+    try {
+      inputStream = connection.getInputStream();
+      byte[] buffer = new byte[65535];
+      byte[] header = new byte[12];
+      DataInputStream is = new DataInputStream(inputStream);
+
+      while (true) {
+        try {
+          is.readFully(header, 0, header.length);
+        } catch (EOFException e) {
+          break;
+        }
+        int len = Util.aByteToInt(header, 0);
+        long offset = Util.abyteToLong(header, 4);
+        if (buffer.length < len) {
+          buffer = new byte[len];
+        }
+        is.readFully(buffer, 0, len);
+        consumer.accept(buffer, len, offset);
+      }
+
+    } catch (Exception e) {
+      int code = connection.getResponseCode();
       throw new Exception(
-          "status code "
-              + response.getStatus()
-              + " url: "
-              + urlGetScan
-              + "storagePrefix: "
-              + storagePrefix
-              + " body: "
-              + convertStreamToString(response.getRawBody()));
-    }
-    byte[] buffer = new byte[65535];
-    byte[] header = new byte[12];
-    DataInputStream is = new DataInputStream(response.getRawBody());
-
-    while (true) {
-      try {
-        is.readFully(header, 0, header.length);
-      } catch (EOFException e) {
-        break;
+          "status code " + code + " url: " + urlGetScan + "storagePrefix: " + storagePrefix);
+    } finally {
+      if (reader != null) {
+        reader.close();
       }
-      int len = Util.aByteToInt(header, 0);
-      long offset = Util.abyteToLong(header, 4);
-      if (buffer.length < len) {
-        buffer = new byte[len * 2];
+      if (inputStream != null) {
+        inputStream.close();
       }
-      is.readFully(buffer, 0, len);
-      consumer.accept(buffer, len, offset);
+      connection.disconnect();
     }
   }
 
@@ -210,6 +227,14 @@ public class Client {
   }
 
   public abstract static class ScanConsumer {
+    public int getConnectTimeout() {
+      return 1000;
+    }
+
+    public int getReadTimeout() {
+      return 1000;
+    }
+
     public abstract void accept(byte[] buffer, int length, long rochefortOffset) throws Exception;
   }
 }
