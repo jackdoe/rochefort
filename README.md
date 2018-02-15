@@ -17,6 +17,19 @@ $ go run main.go -buckets 10 -bind :8001 -root /tmp
 * root: root directory, files will be created at `root/storagePrefix||default/append.%d.raw`
 * bind: address to bind to
 
+### docker
+
+run with docker: jackdoe/rochefort:0.1
+
+```
+docker run -e BUCKETS="10" \
+           -e BIND=":8001" \
+           -e ROOT="/tmp/rochefort" \
+           -p 8001:8001 \
+           jackdoe/rochefort:0.1
+```
+
+dont forget to mount persisted root directory
 
 ## STORE
 
