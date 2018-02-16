@@ -139,6 +139,12 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	file.offset += int64(len(dataRaw) + headerLen)
 	file.Unlock()
 
+	_, err = file.descriptor.WriteAt(dataRaw, currentOffset+headerLen)
+	if err != nil {
+		panic(err)
+	}
+
+	// first write the data, then the header
 	header := make([]byte, headerLen)
 	binary.LittleEndian.PutUint32(header[0:], uint32(len(dataRaw)))
 	binary.LittleEndian.PutUint64(header[4:], uint64(time.Now().UnixNano()))
@@ -147,11 +153,6 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	binary.LittleEndian.PutUint32(header[12:], checksum)
 
 	_, err = file.descriptor.WriteAt(header, currentOffset)
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = file.descriptor.WriteAt(dataRaw, currentOffset+headerLen)
 	if err != nil {
 		panic(err)
 	}
