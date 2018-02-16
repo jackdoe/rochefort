@@ -251,9 +251,9 @@ func or(a, b string) string {
 	return b
 }
 func main() {
-	var pnBuckets = flag.Int("buckets", 128, "number of files to open")
+	var pnBuckets = flag.Int("buckets", 8, "number of files to open")
 	var pbind = flag.String("bind", ":8000", "address to bind to")
-	var proot = flag.String("root", "/tmp", "root directory")
+	var proot = flag.String("root", "/tmp/rochefort", "root directory")
 	flag.Parse()
 
 	if *pnBuckets > 8191 {
