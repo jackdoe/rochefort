@@ -8,7 +8,7 @@ example usage:
 
   import nl.prymr.rochefort.Client;
 
-  // the client is threadsafe, so make only 1 
+  // the client is threadsafe, so make only 1
   public static final Client rochefort = new Client("http://localhost:8000");
 
   // stores data for "exampleKey"

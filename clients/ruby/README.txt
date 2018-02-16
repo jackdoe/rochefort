@@ -22,7 +22,7 @@ timeouts:
 you can pass read_timeout and open_timeout
 
 if you want to namespace your ids into different directories use the
-parameter storage_prefix
+parameter namespace
 
 e.g.:
-  offset = r.append(storage_prefix: 'today', id: '123',data: 'example data')
+  offset = r.append(namespace: 'today', id: '123',data: 'example data')
