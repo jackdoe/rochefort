@@ -42,12 +42,12 @@ public class Client {
     this.urlScan = prefix + "scan";
   }
 
-  public static long append(String urlSet, String storagePrefix, String id, byte[] data)
+  public static long append(String urlSet, String namespace, String id, byte[] data)
       throws Exception {
     HttpResponse<InputStream> response =
         Unirest.post(urlSet)
             .queryString("id", id)
-            .queryString("storagePrefix", storagePrefix)
+            .queryString("namespace", namespace)
             .body(data)
             .asBinary();
     if (response.getStatus() != 200) {
@@ -64,15 +64,15 @@ public class Client {
     return new JsonNode(new String(ret)).getObject().getLong("offset");
   }
 
-  public static List<byte[]> getMulti(
-      String urlGetMulti, String storagePrefix, long[] listOfOffsets) throws Exception {
-    return getMulti(urlGetMulti, storagePrefix, Util.listOfLongsToBytes(listOfOffsets));
+  public static List<byte[]> getMulti(String urlGetMulti, String namespace, long[] listOfOffsets)
+      throws Exception {
+    return getMulti(urlGetMulti, namespace, Util.listOfLongsToBytes(listOfOffsets));
   }
 
-  public static byte[] get(String urlGet, String storagePrefix, long offset) throws Exception {
+  public static byte[] get(String urlGet, String namespace, long offset) throws Exception {
     HttpResponse<InputStream> response =
         Unirest.get(urlGet)
-            .queryString("storagePrefix", storagePrefix)
+            .queryString("namespace", namespace)
             .queryString("offset", offset)
             .asBinary();
     if (response.getStatus() != 200) {
@@ -81,8 +81,8 @@ public class Client {
               + response.getStatus()
               + " url: "
               + urlGet
-              + " storagePrefix: "
-              + storagePrefix
+              + " namespace: "
+              + namespace
               + " body: "
               + convertStreamToString(response.getRawBody()));
     }
@@ -91,11 +91,11 @@ public class Client {
   }
 
   public static List<byte[]> getMulti(
-      String urlGetMulti, String storagePrefix, byte[] encodedListOfOffsets) throws Exception {
+      String urlGetMulti, String namespace, byte[] encodedListOfOffsets) throws Exception {
 
     HttpResponse<InputStream> response =
         Unirest.post(urlGetMulti)
-            .queryString("storagePrefix", storagePrefix)
+            .queryString("namespace", namespace)
             .body(encodedListOfOffsets)
             .asBinary();
     if (response.getStatus() != 200) {
@@ -104,8 +104,8 @@ public class Client {
               + response.getStatus()
               + " url: "
               + urlGetMulti
-              + "storagePrefix: "
-              + storagePrefix
+              + "namespace: "
+              + namespace
               + " body: "
               + convertStreamToString(response.getRawBody()));
     }
@@ -134,9 +134,9 @@ public class Client {
     return out;
   }
 
-  public static void scan(String urlGetScan, String storagePrefix, ScanConsumer consumer)
+  public static void scan(String urlGetScan, String namespace, ScanConsumer consumer)
       throws Exception {
-    URL url = new URL((urlGetScan + "?storagePrefix=" + storagePrefix));
+    URL url = new URL((urlGetScan + "?namespace=" + namespace));
 
     // XXX: Unirest reads the whole body, which makes the scan useless
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -174,7 +174,7 @@ public class Client {
     } catch (Exception e) {
       int code = connection.getResponseCode();
       throw new Exception(
-          "status code " + code + " url: " + urlGetScan + "storagePrefix: " + storagePrefix);
+          "status code " + code + " url: " + urlGetScan + "namespace: " + namespace);
     } finally {
       if (reader != null) {
         reader.close();
@@ -190,16 +190,16 @@ public class Client {
     return append("", id, data);
   }
 
-  public long append(String storagePrefix, String id, byte[] data) throws Exception {
-    return append(this.urlAppend, storagePrefix, id, data);
+  public long append(String namespace, String id, byte[] data) throws Exception {
+    return append(this.urlAppend, namespace, id, data);
   }
 
   public byte[] get(long offset) throws Exception {
     return get("", offset);
   }
 
-  public byte[] get(String storagePrefix, long offset) throws Exception {
-    return get(this.urlGet, storagePrefix, offset);
+  public byte[] get(String namespace, long offset) throws Exception {
+    return get(this.urlGet, namespace, offset);
   }
 
   public List<byte[]> getMulti(long[] listOfOffsets) throws Exception {
@@ -210,20 +210,20 @@ public class Client {
     return getMulti("", encodedListOfOffsets);
   }
 
-  public List<byte[]> getMulti(String storagePrefix, long[] listOfOffsets) throws Exception {
-    return getMulti(this.urlGetMulti, storagePrefix, listOfOffsets);
+  public List<byte[]> getMulti(String namespace, long[] listOfOffsets) throws Exception {
+    return getMulti(this.urlGetMulti, namespace, listOfOffsets);
   }
 
-  public List<byte[]> getMulti(String storagePrefix, byte[] encodedListOfOffsets) throws Exception {
-    return getMulti(this.urlGetMulti, storagePrefix, encodedListOfOffsets);
+  public List<byte[]> getMulti(String namespace, byte[] encodedListOfOffsets) throws Exception {
+    return getMulti(this.urlGetMulti, namespace, encodedListOfOffsets);
   }
 
   public void scan(ScanConsumer consumer) throws Exception {
     scan(this.urlScan, "", consumer);
   }
 
-  public void scan(String storagePrefix, ScanConsumer consumer) throws Exception {
-    scan(this.urlScan, storagePrefix, consumer);
+  public void scan(String namespace, ScanConsumer consumer) throws Exception {
+    scan(this.urlScan, namespace, consumer);
   }
 
   public abstract static class ScanConsumer {

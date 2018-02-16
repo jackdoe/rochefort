@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class ClientTest extends TestCase {
-  public static final String[] prefixes = new String[] {"", "some-very-long-name", "example"};
+  public static final String[] namespaces = new String[] {"", "some-very-long-name", "example"};
   public static Map<String, Map<Long, byte[]>> lookupAllOffsets = new ConcurrentHashMap<>();
   Client client;
 
@@ -23,8 +23,8 @@ public class ClientTest extends TestCase {
 
   @Override
   public void setUp() throws Exception {
-    client = new Client(System.getenv("ROCHEFORT_TEST_HOST"));
-    for (final String s : prefixes) {
+    client = new Client(System.getenv("ROCHEFORT_TEST"));
+    for (final String s : namespaces) {
       lookupAllOffsets.put(s, new ConcurrentHashMap<Long, byte[]>());
       client.scan(
           s,
@@ -48,7 +48,7 @@ public class ClientTest extends TestCase {
 
     for (int attempt = 0; attempt < 2; attempt++) {
 
-      for (final String storagePrefix : prefixes) {
+      for (final String namespace : namespaces) {
 
         List<byte[]> everything = new ArrayList<>();
         List<Long> allOffsets = new ArrayList<>();
@@ -74,19 +74,19 @@ public class ClientTest extends TestCase {
             bos.flush();
 
             byte[] data = bos.toByteArray();
-            long offset = client.append(storagePrefix, id, data);
+            long offset = client.append(namespace, id, data);
             offsets.add(offset);
             stored.add(data);
 
             // make sure we never get the same offset twice
             assertNull("we already have offset " + offset, lookupAllOffsets.get(offset));
-            lookupAllOffsets.get(storagePrefix).put(offset, data);
+            lookupAllOffsets.get(namespace).put(offset, data);
 
-            byte[] fetchedData = client.get(storagePrefix, offset);
+            byte[] fetchedData = client.get(namespace, offset);
             //            assertTrue(
             //                String.format(
-            //                    "storagePrefix:%s id:%s size: %d offset: %d expected: %s got %s",
-            //                    storagePrefix,
+            //                    "namespace:%s id:%s size: %d offset: %d expected: %s got %s",
+            //                    namespace,
             //                    id,
             //                    size,
             //                    offset,
@@ -97,7 +97,7 @@ public class ClientTest extends TestCase {
 
             long[] loffsets = new long[offsets.size()];
             for (int i = 0; i < offsets.size(); i++) loffsets[i] = offsets.get(i);
-            List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
+            List<byte[]> fetched = client.getMulti(namespace, loffsets);
 
             assertFalse(stored.size() == 0);
             assertEquals(stored.size(), fetched.size());
@@ -112,7 +112,7 @@ public class ClientTest extends TestCase {
 
         long[] loffsets = new long[allOffsets.size()];
         for (int i = 0; i < allOffsets.size(); i++) loffsets[i] = allOffsets.get(i);
-        List<byte[]> fetched = client.getMulti(storagePrefix, loffsets);
+        List<byte[]> fetched = client.getMulti(namespace, loffsets);
 
         assertFalse(fetched.size() == 0);
         assertEquals(everything.size(), fetched.size());
@@ -124,16 +124,16 @@ public class ClientTest extends TestCase {
       synchronized (ClientTest.class) {
         // no insert while we are scanning, because otherwise we cant verify everything is 100% in
         // place
-        for (final String storagePrefix : prefixes) {
+        for (final String namespace : namespaces) {
           client.scan(
-              storagePrefix,
+              namespace,
               new Client.ScanConsumer() {
                 @Override
                 public void accept(byte[] buffer, int length, long offset) {
                   assertNotNull(
-                      "missing offset " + offset, lookupAllOffsets.get(storagePrefix).get(offset));
+                      "missing offset " + offset, lookupAllOffsets.get(namespace).get(offset));
                   byte[] tmp = Arrays.copyOf(buffer, length);
-                  byte[] stored = lookupAllOffsets.get(storagePrefix).get(offset);
+                  byte[] stored = lookupAllOffsets.get(namespace).get(offset);
                   //                  assertTrue(
                   //                      String.format(
                   //                          "offset: %d expected: %s got %s",

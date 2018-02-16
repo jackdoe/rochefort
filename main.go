@@ -238,7 +238,7 @@ func Log(handler http.Handler) http.Handler {
 	})
 }
 
-const storagePrefixKey = "storagePrefix"
+const namespaceKey = "namespace"
 const idKey = "id"
 const offsetKey = "offset"
 
@@ -276,13 +276,13 @@ func main() {
 	}()
 
 	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
-		multiStore.close(r.URL.Query().Get(storagePrefixKey))
+		multiStore.close(r.URL.Query().Get(namespaceKey))
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("{\"success\":true}"))
 	})
 
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		offset, file, err := multiStore.append(r.URL.Query().Get(storagePrefixKey), r.URL.Query().Get(idKey), r.Body)
+		offset, file, err := multiStore.append(r.URL.Query().Get(namespaceKey), r.URL.Query().Get(idKey), r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -298,7 +298,7 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			_, data, err := multiStore.read(r.URL.Query().Get(storagePrefixKey), offset)
+			_, data, err := multiStore.read(r.URL.Query().Get(namespaceKey), offset)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
@@ -313,7 +313,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
-		multiStore.scan(r.URL.Query().Get(storagePrefixKey), func(dataLen uint32, offset uint64, data []byte) {
+		multiStore.scan(r.URL.Query().Get(namespaceKey), func(dataLen uint32, offset uint64, data []byte) {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
@@ -332,10 +332,10 @@ func main() {
 			w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
 			return
 		}
-		storagePrefix := r.URL.Query().Get(storagePrefixKey)
+		namespace := r.URL.Query().Get(namespaceKey)
 		for i := 0; i < len(b); i += 8 {
 			offset := binary.LittleEndian.Uint64(b[i:])
-			_, data, err := multiStore.read(storagePrefix, offset)
+			_, data, err := multiStore.read(namespace, offset)
 
 			// XXX: we ignore the error on purpose
 			// as the storage is not fsyncing, it could very well lose some updates

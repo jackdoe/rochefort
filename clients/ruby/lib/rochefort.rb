@@ -17,18 +17,18 @@ class Rochefort
   end
 
   def append(opts)
-    data = RestClient::Request.execute(method: :post, url: "#{@urlSet}?storagePrefix=#{opts[:storage_prefix]}&id=#{opts[:id]}",payload: opts[:data], read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1)
+    data = RestClient::Request.execute(method: :post, url: "#{@urlSet}?namespace=#{opts[:namespace]}&id=#{opts[:id]}",payload: opts[:data], read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1)
     out = JSON.parse(data.body)
     return out["offset"]
   end
 
   def get(opts)
-    data = RestClient::Request.execute(method: :get, url: "#{@urlGet}?storagePrefix=#{opts[:storage_prefix]}&offset=#{opts[:offset]}", read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1)
+    data = RestClient::Request.execute(method: :get, url: "#{@urlGet}?namespace=#{opts[:namespace]}&offset=#{opts[:offset]}", read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1)
     return data
   end 
 
   def getMulti(opts)
-    data = RestClient::Request.execute(method: :get, url: "#{@urlGetMulti}?storagePrefix=#{opts[:storage_prefix]}", payload: opts[:offsets].pack("q<*"), read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1).body
+    data = RestClient::Request.execute(method: :get, url: "#{@urlGetMulti}?namespace=#{opts[:namespace]}", payload: opts[:offsets].pack("q<*"), read_timeout: opts[:read_timeout] || 1, open_timeout: opts[:open_timeout] || 1).body
     offset = 0
     out = []
     while offset != data.length

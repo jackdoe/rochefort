@@ -18,8 +18,8 @@ docker run -e BUCKETS="10" \
 ```
 
 ### parameters
-* buckets: number of filers per storagePrefix
-* root: root directory, files will be created at `root/storagePrefix||default/append.%d.raw`
+* buckets: number of filers per namespace
+* root: root directory, files will be created at `root/namespace||default/append.%d.raw`
 * bind: address to bind to
 
 dont forget to mount persisted root directory
@@ -103,20 +103,20 @@ the protocol is very simple, it stores the length of the item in 4 bytes:
 `[len]some text[len]some other data in same identifier`
 
 ## STORAGE PREFIX
-you can also pass "storagePrefix" parameter and this will create different directories per storagePrefix, for example
+you can also pass "namespace" parameter and this will create different directories per namespace, for example
 
 ```
-?storagePrefix=events_from_20171111 
-?storagePrefix=events_from_20171112
+?namespace=events_from_20171111 
+?namespace=events_from_20171112
 ```
 
 and then you simply delete the directories you dont need
 
 ## CLOSE
-Closes storagePrefix so it can be deleted
+Closes a namespace so it can be deleted
 
 ```
-$ curl http://localhost:8000/close?storagePrefix=events_from_20171112
+$ curl http://localhost:8000/close?namespace=events_from_20171112
 {"success":true}
 ```
 
@@ -141,10 +141,10 @@ header makes us allocate 10gb in `output := make([]byte, dataLen)`
 
 ## SCAN
 
-scans all buckets from a storagePrefix
+scans all buckets from a namespace
 
 ```
-$ curl http://localhost:8000/scan?storagePrefix=someStoragePrefix > dump.txt
+$ curl http://localhost:8000/scan?namespace=someStoragePrefix > dump.txt
 ```
 
 the format is
