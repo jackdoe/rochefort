@@ -102,15 +102,16 @@ in case of error length is 0 and what follows is the error text
 the protocol is very simple, it stores the length of the item in 4 bytes:
 `[len]some text[len]some other data in same identifier`
 
-## STORAGE PREFIX
+## NAMESPACE
 you can also pass "namespace" parameter and this will create different directories per namespace, for example
 
 ```
 ?namespace=events_from_20171111 
 ?namespace=events_from_20171112
 ```
+will crete {root_directory}/events_from_20171111/... and {root_directory}/events_from_20171112/...
 
-and then you simply delete the directories you dont need
+and then you simply delete the directories you dont need (after closing them)
 
 ## CLOSE
 Closes a namespace so it can be deleted
