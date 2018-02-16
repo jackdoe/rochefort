@@ -7,14 +7,14 @@
 
 ## run in docker
 
-run with docker: jackdoe/rochefort:0.1
+run with docker: jackdoe/rochefort:0.2
 
 ```
 docker run -e BUCKETS="10" \
            -e BIND=":8001" \
            -e ROOT="/tmp/rochefort" \
            -p 8001:8001 \
-           jackdoe/rochefort:0.1
+           jackdoe/rochefort:0.2
 ```
 
 ### parameters
