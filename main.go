@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -289,7 +290,9 @@ func main() {
 			w.Write([]byte(err.Error()))
 		} else {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
+
+			// add offset_str for languages who cant do 64 bit math (... js)
+			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"offset_str\":\"%d\",\"file\":\"%s\"}", offset, offset, file)))
 		}
 	})
 
@@ -334,20 +337,39 @@ func main() {
 			return
 		}
 		namespace := r.URL.Query().Get(namespaceKey)
-		for i := 0; i < len(b); i += 8 {
-			offset := binary.LittleEndian.Uint64(b[i:])
-			_, data, err := multiStore.read(namespace, offset)
 
-			// XXX: we ignore the error on purpose
-			// as the storage is not fsyncing, it could very well lose some updates
-			// also the data is barely checksummed, so might very well be corrupted
-			if err == nil {
-				binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-				w.Write(dataLenRaw)
-				w.Write(data)
+		if r.URL.Query().Get("csv") == "true" {
+			csv := string(b)
+			for _, v := range strings.Split(csv, ",") {
+				offset, err := strconv.ParseUint(v, 10, 64)
+				if err == nil {
+					_, data, err := multiStore.read(namespace, offset)
+					if err == nil {
+						binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
+						w.Write(dataLenRaw)
+						w.Write(data)
+					}
+				}
 			}
+
+		} else {
+			for i := 0; i < len(b); i += 8 {
+				offset := binary.LittleEndian.Uint64(b[i:])
+				_, data, err := multiStore.read(namespace, offset)
+
+				// XXX: we ignore the error on purpose
+				// as the storage is not fsyncing, it could very well lose some updates
+				// also the data is barely checksummed, so might very well be corrupted
+				if err == nil {
+					binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
+					w.Write(dataLenRaw)
+					w.Write(data)
+				}
+			}
+
 		}
 	})
+
 	log.Printf("starting http server on %s", *pbind)
 	err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
 	if err != nil {
