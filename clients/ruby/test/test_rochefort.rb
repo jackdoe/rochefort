@@ -1,6 +1,6 @@
 require 'minitest/autorun'
 require 'rochefort'
-
+require 'securerandom'
 class RochefortTest < Minitest::Unit::TestCase
   def test_rochefort
     url = ENV["ROCHEFORT_TEST"]
@@ -13,8 +13,8 @@ class RochefortTest < Minitest::Unit::TestCase
         end
 
         1.upto(10) do |id|
-          800.upto(1010) do |suffix|
-            data = "asdasd #{suffix} #{rand(36**suffix).to_s(36)}"
+          1.upto(10) do |suffix|
+            data = SecureRandom.random_bytes(suffix * 100)
             offset = r.append(namespace: ns,id: id,data: data)
             fetched = r.get(namespace: ns, offset: offset)
 
