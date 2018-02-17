@@ -174,7 +174,14 @@ public class Client {
     } catch (Exception e) {
       int code = connection.getResponseCode();
       throw new Exception(
-          "status code " + code + " url: " + urlGetScan + "namespace: " + namespace);
+          "status code "
+              + code
+              + " url: "
+              + urlGetScan
+              + " namespace: "
+              + namespace
+              + " exception: "
+              + e.getMessage());
     } finally {
       if (reader != null) {
         reader.close();
