@@ -1,0 +1,26 @@
+{
+  "name": "rochefort",
+  "version": "1.0.0",
+  "description": "client for rochefort - fast data append service that returns offsets to be indexed",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackdoe/rochefort.git"
+  },
+  "keywords": [
+    "rochefort",
+    "store"
+  ],
+  "author": "Borislav Nikolov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jackdoe/rochefort/issues"
+  },
+  "homepage": "https://github.com/jackdoe/rochefort#readme",
+  "dependencies": {
+    "axios": "^0.17.1"
+  }
+}
