@@ -1,4 +1,4 @@
-# lives at (jackdoe/go-rochefort-client)[https://github.com/jackdoe/go-rochefort-client]
+# lives at [jackdoe/go-rochefort-client](https://github.com/jackdoe/go-rochefort-client)
 
 example
 
