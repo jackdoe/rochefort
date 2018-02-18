@@ -166,3 +166,24 @@ MIT
 
 [Rochefort Trappistes 10](https://www.ratebeer.com/beer/rochefort-trappistes-10/2360/) is my favorite beer and I was drinking it
 while doing the initial implementation at sunday night
+
+
+## losing data + NIH
+You can lose data on crash and there is no replication, so you have
+to orchestrate that yourself doing double writes or something.
+
+The super simple architecture allows for all kidnds of hacks to do
+backups/replication/sharding but you have to do those yourself.
+
+My usecase is ok with losing some data, and we dont have money to pay
+for kafka+zk+monitoring(kafka,zk), nor time to learn how to optimize
+it for our quite big write and very big multi-read load.
+
+Keep in mind that there is some not-invented-here syndrome involved
+into making it, but I use the service in production and it works very
+nice :)
+
+
+## TODO
+
+* multi append (one call, append many)
