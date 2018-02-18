@@ -1,5 +1,8 @@
-# rochefort - PUSH DATA, GET FILE OFFSET; no shenanigans
+# rochefort - poor man's kafka 
 ---
+### PUSH DATA, GET FILE OFFSET; no shenanigans
+#### (if you can afford to lose data and do your own replication)
+
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
 * supports: **append, get, multiget, close**
@@ -155,3 +158,9 @@ the format is
 ## LICENSE
 
 MIT
+
+
+## naming rochefort
+
+[Rochefort Trappistes 10](https://www.ratebeer.com/beer/rochefort-trappistes-10/2360/) is my favorite beer, and I was drinking it
+while doing the initial implementation at sunday night
