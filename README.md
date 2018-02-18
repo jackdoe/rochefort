@@ -3,7 +3,7 @@
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
 * supports: **append, get, multiget, close**
-* clients: [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
+* clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
 
 ## run in docker
 
