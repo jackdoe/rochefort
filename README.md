@@ -164,5 +164,5 @@ MIT
 
 ## naming rochefort
 
-[Rochefort Trappistes 10](https://www.ratebeer.com/beer/rochefort-trappistes-10/2360/) is my favorite beer, and I was drinking it
+[Rochefort Trappistes 10](https://www.ratebeer.com/beer/rochefort-trappistes-10/2360/) is my favorite beer and I was drinking it
 while doing the initial implementation at sunday night
