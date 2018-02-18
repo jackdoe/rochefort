@@ -189,3 +189,4 @@ nice :)
 * multi append (one call, append many)
 * perl client
 * make c client that can be used from ruby/perl
+* javadoc for the java client
