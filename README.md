@@ -1,5 +1,5 @@
 # rochefort - poor man's kafka 
----
+
 ### PUSH DATA, GET FILE OFFSET; no shenanigans
 #### (if you can afford to lose data and do your own replication)
 
@@ -7,6 +7,8 @@
 * if you are ok with losing some data (does not fsync on write)
 * supports: **append, get, multiget, close**
 * clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
+
+---
 
 ## run in docker
 
