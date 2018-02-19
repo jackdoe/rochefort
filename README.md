@@ -116,7 +116,7 @@ you can also pass "namespace" parameter and this will create different directori
 ```
 will crete {root_directory}/events_from_20171111/... and {root_directory}/events_from_20171112/...
 
-and then you simply delete the directories you dont need (after closing them)
+and then you simply delete the directories you don't need (after closing them)
 
 ## CLOSE
 Closes a namespace so it can be deleted
@@ -172,7 +172,7 @@ while doing the initial implementation at sunday night
 You can lose data on crash and there is no replication, so you have
 to orchestrate that yourself doing double writes or something.
 
-The super simple architecture allows for all kidnds of hacks to do
+The super simple architecture allows for all kinds of hacks to do
 backups/replication/sharding but you have to do those yourself.
 
 My usecase is ok with losing some data, and we dont have money to pay
