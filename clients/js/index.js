@@ -12,7 +12,7 @@ const append = function append(args) {
         timeout: args.timeout || 1000,
         data: args.data
     }).then((r) => {
-        return r.data.offset_str
+        return r.data.offset
     })
 }
 
@@ -30,16 +30,32 @@ const get = function get(args) {
         return r.data
     })
 }
+const Buffer = require('buffer').Buffer;
 
 const getMulti = function get(args) {
+    var raw = Buffer.alloc(args.offsets.length * 8)
+    var offsets = args.offsets
+    for (let i = 0; i < offsets.length; i++) {
+        var num = offsets[i]
+        var bufferOffset = i * 8;
+
+        var lo = num | 0;
+        if (lo < 0)
+            lo += 4294967296;
+
+        var hi = num - lo;
+        hi /= 4294967296;
+        raw.writeUInt32LE(lo, bufferOffset)
+        raw.writeUInt32LE(hi, bufferOffset + 4)
+    }
+
     return axios({
         url:new URL("getMulti",args.url).toString(),
         params: {
-            csv: "true",
             namespace: args.namespace,
         },
         responseType: 'arraybuffer',
-        data: (args.offsets || []).join(","),
+        data: raw,
         timeout: args.timeout || 1000,
     }).then((r) => {
         var out = []

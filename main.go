@@ -14,7 +14,6 @@ import (
 	"os/signal"
 	"path"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -23,66 +22,53 @@ import (
 type StoreItem struct {
 	path       string
 	descriptor *os.File
-	offset     int64
+	offset     uint64
 	sync.Mutex
 }
-type Storage struct {
-	files []*StoreItem
-}
 
-func NewStorage(root string, n int) *Storage {
-	storage := &Storage{
-		files: make([]*StoreItem, n),
-	}
-
+func NewStorage(root string) *StoreItem {
 	os.MkdirAll(root, 0700)
 
-	for i := 0; i < n; i++ {
-		filePath := path.Join(root, fmt.Sprintf("append.%d.raw", i))
-		f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0600)
-		if err != nil {
-			panic(err)
-		}
-		offset, err := f.Seek(0, 2)
-
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("openning: %s with offset: %d", filePath, offset)
-		si := &StoreItem{
-			offset:     offset,
-			path:       filePath,
-			descriptor: f,
-		}
-		storage.files[i] = si
+	filePath := path.Join(root, "append.raw")
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		panic(err)
 	}
-	return storage
+	offset, err := f.Seek(0, 2)
+
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("openning: %s with offset: %d", filePath, offset)
+	si := &StoreItem{
+		offset:     uint64(offset),
+		path:       filePath,
+		descriptor: f,
+	}
+	return si
 }
 
-func (this *Storage) scan(cb func(uint32, uint64, []byte) bool) {
-MAIN:
-	for fileIdx, f := range this.files {
-	SCAN:
-		for offset := int64(0); offset < f.offset; {
-			// this is lockless, which means we could read a header,
-			// but the data might be incomplete
+func (this *StoreItem) scan(cb func(uint32, uint64, []byte) bool) {
+SCAN:
+	for offset := uint64(0); offset < this.offset; {
+		// this is lockless, which means we could read a header,
+		// but the data might be incomplete
 
-			dataLen, err := readHeader(f.descriptor, uint64(offset))
-			if err != nil {
-				break SCAN
-			}
-			output := make([]byte, dataLen)
-			_, err = f.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
-			if err != nil {
-				break SCAN
-			}
-
-			if !cb(dataLen, encodedOffset(fileIdx, offset), output) {
-				break MAIN
-			}
-
-			offset += int64(dataLen + headerLen)
+		dataLen, err := readHeader(this.descriptor, uint64(offset))
+		if err != nil {
+			break SCAN
 		}
+		output := make([]byte, dataLen)
+		_, err = this.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
+		if err != nil {
+			break SCAN
+		}
+
+		if !cb(dataLen, offset, output) {
+			break SCAN
+		}
+
+		offset += uint64(dataLen) + uint64(headerLen)
 	}
 }
 
@@ -107,44 +93,33 @@ func readHeader(file *os.File, offset uint64) (uint32, error) {
 	return dataLen, nil
 }
 
-func (this *Storage) read(offset uint64) (uint32, []byte, error) {
+func (this *StoreItem) read(offset uint64) (uint32, []byte, error) {
 	// lockless read
-	fileIndex := offset >> 50
-	offset = offset & 0x0000FFFFFFFFFFFF
-	if fileIndex > uint64(len(this.files)-1) {
-		return 0, nil, errors.New("wrong offset, index > open files")
-	}
-	file := this.files[fileIndex]
-
-	dataLen, err := readHeader(file.descriptor, offset)
+	dataLen, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return 0, nil, err
 	}
 
 	output := make([]byte, dataLen)
-	_, err = file.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
+	_, err = this.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
 	if err != nil {
 		return 0, nil, err
 	}
 	return dataLen, output, nil
 }
 
-func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) {
+func (this *StoreItem) append(sid string, data io.Reader) (uint64, string, error) {
 	dataRaw, err := ioutil.ReadAll(data)
 	if err != nil {
 		return 0, "", err
 	}
 
-	id := hash(sid)
-	fileIndex := int(id % uint32(len(this.files)))
-	file := this.files[fileIndex]
+	this.Lock()
+	currentOffset := this.offset
+	this.offset += uint64(len(dataRaw) + headerLen)
+	this.Unlock()
 
-	file.Lock()
-	currentOffset := file.offset
-	file.offset += int64(len(dataRaw) + headerLen)
-	file.Unlock()
-
-	_, err = file.descriptor.WriteAt(dataRaw, currentOffset+headerLen)
+	_, err = this.descriptor.WriteAt(dataRaw, int64(currentOffset+headerLen))
 	if err != nil {
 		panic(err)
 	}
@@ -157,19 +132,12 @@ func (this *Storage) append(sid string, data io.Reader) (uint64, string, error) 
 	checksum := crc(header[0:12])
 	binary.LittleEndian.PutUint32(header[12:], checksum)
 
-	_, err = file.descriptor.WriteAt(header, currentOffset)
+	_, err = this.descriptor.WriteAt(header, int64(currentOffset))
 	if err != nil {
 		panic(err)
 	}
 
-	return encodedOffset(fileIndex, currentOffset), file.path, nil
-}
-
-func encodedOffset(fileIndex int, offset int64) uint64 {
-	return (uint64(fileIndex) << uint64(50)) | uint64(offset)
-}
-func hash(s string) uint32 {
-	return uint32(metro.Hash64Str(s, 0) >> uint64(32))
+	return currentOffset, this.path, nil
 }
 
 func crc(b []byte) uint32 {
@@ -177,13 +145,12 @@ func crc(b []byte) uint32 {
 }
 
 type MultiStore struct {
-	stores   map[string]*Storage
-	nBuckets int
-	root     string
+	stores map[string]*StoreItem
+	root   string
 	sync.RWMutex
 }
 
-func (this *MultiStore) find(storageIdentifier string) *Storage {
+func (this *MultiStore) find(storageIdentifier string) *StoreItem {
 	if storageIdentifier == "" {
 		storageIdentifier = "default"
 	}
@@ -197,7 +164,7 @@ func (this *MultiStore) find(storageIdentifier string) *Storage {
 		storage, ok = this.stores[storageIdentifier]
 
 		if !ok {
-			storage = NewStorage(path.Join(this.root, storageIdentifier), this.nBuckets)
+			storage = NewStorage(path.Join(this.root, storageIdentifier))
 			this.stores[storageIdentifier] = storage
 		}
 	}
@@ -212,10 +179,8 @@ func (this *MultiStore) close(storageIdentifier string) {
 	}
 	storage, ok := this.stores[storageIdentifier]
 	if ok {
-		for _, file := range storage.files {
-			file.descriptor.Close()
-			log.Printf("closing: %s", file.path)
-		}
+		storage.descriptor.Close()
+		log.Printf("closing: %s", storage.path)
 	}
 	delete(this.stores, storageIdentifier)
 }
@@ -249,19 +214,13 @@ const idKey = "id"
 const offsetKey = "offset"
 
 func main() {
-	var pnBuckets = flag.Int("buckets", 8, "number of files to open")
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp/rochefort", "root directory")
 	flag.Parse()
 
-	if *pnBuckets > 8191 {
-		log.Fatalf("buckets can be at most 8191, we store them in 13 bits (returned offsets are bucket << 50 | offset)")
-	}
-
 	multiStore := &MultiStore{
-		stores:   make(map[string]*Storage),
-		nBuckets: *pnBuckets,
-		root:     *proot,
+		stores: make(map[string]*StoreItem),
+		root:   *proot,
 	}
 
 	sigs := make(chan os.Signal, 1)
@@ -271,11 +230,9 @@ func main() {
 		log.Printf("\nReceived an interrupt, stopping services...\n")
 		multiStore.Lock() // dont unlock it
 		for _, storage := range multiStore.stores {
-			for _, file := range storage.files {
-				file.Lock() // dont unlock it
-				file.descriptor.Close()
-				log.Printf("closing: %s", file.path)
-			}
+			storage.Lock() // dont unlock it
+			storage.descriptor.Close()
+			log.Printf("closing: %s", storage.path)
 		}
 		os.Exit(0)
 
@@ -294,9 +251,7 @@ func main() {
 			w.Write([]byte(err.Error()))
 		} else {
 			w.Header().Set("Content-Type", "application/json")
-
-			// add offset_str for languages who cant do 64 bit math (... js)
-			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"offset_str\":\"%d\",\"file\":\"%s\"}", offset, offset, file)))
+			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
 		}
 	})
 
@@ -349,55 +304,31 @@ func main() {
 
 		namespace := r.URL.Query().Get(namespaceKey)
 
-		if r.URL.Query().Get("csv") == "true" {
-			w.Header().Set("Content-Type", "application/octet-stream")
-			csv := string(b)
-			for _, v := range strings.Split(csv, ",") {
-				offset, err := strconv.ParseUint(v, 10, 64)
-				if err == nil {
-					_, data, err := multiStore.read(namespace, offset)
-					if err == nil {
-						binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-						_, err = w.Write(dataLenRaw)
-						if err != nil {
-							return
-						}
-						_, err = w.Write(data)
-						if err != nil {
-							return
-						}
-					}
+		if len(b)%8 != 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("incomplete read: %d is not multiple of 8", len(b))))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/octet-stream")
+		for i := 0; i < len(b); i += 8 {
+			offset := binary.LittleEndian.Uint64(b[i:])
+			_, data, err := multiStore.read(namespace, offset)
+
+			// XXX: we ignore the error on purpose
+			// as the storage is not fsyncing, it could very well lose some updates
+			// also the data is barely checksummed, so might very well be corrupted
+			if err == nil {
+				binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
+				_, err = w.Write(dataLenRaw)
+				if err != nil {
+					return
+				}
+				_, err = w.Write(data)
+				if err != nil {
+					return
 				}
 			}
-
-		} else {
-			if len(b)%8 != 0 {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(fmt.Sprintf("incomplete read: %d is not multiple of 8", len(b))))
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/octet-stream")
-			for i := 0; i < len(b); i += 8 {
-				offset := binary.LittleEndian.Uint64(b[i:])
-				_, data, err := multiStore.read(namespace, offset)
-
-				// XXX: we ignore the error on purpose
-				// as the storage is not fsyncing, it could very well lose some updates
-				// also the data is barely checksummed, so might very well be corrupted
-				if err == nil {
-					binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-					_, err = w.Write(dataLenRaw)
-					if err != nil {
-						return
-					}
-					_, err = w.Write(data)
-					if err != nil {
-						return
-					}
-				}
-			}
-
 		}
 	})
 

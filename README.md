@@ -15,15 +15,13 @@
 run with docker: jackdoe/rochefort:0.5
 
 ```
-docker run -e BUCKETS="10" \
-           -e BIND=":8001" \
+docker run -e BIND=":8000" \
            -e ROOT="/tmp/rochefort" \
-           -p 8001:8001 \
+           -p 8000:8000 \
            jackdoe/rochefort:0.5
 ```
 
 ### parameters
-* buckets: number of filers per namespace
 * root: root directory, files will be created at `root/namespace||default/append.%d.raw`
 * bind: address to bind to
 
@@ -32,62 +30,53 @@ dont forget to mount persisted root directory
 ## compile from source
 
 ```
-$ go run main.go -buckets 10 -bind :8001 -root /tmp
-2018/02/10 12:06:21 starting http server on :8001
+$ go run main.go -bind :8000 -root /tmp
+2018/02/10 12:06:21 starting http server on :8000
 ....
 
 ```
 
 ## STORE
 
-method post /append?id=some_identifier returns `{"offset":3659174697238528,"file":"/tmp/append.3.raw"}`
-
-the offset encodes the bucket and the actual offset, `bucket << 50 | offset`
-since java doesnot have unsigned longs, we can have at most 8191 buckets (13 bits)
-(otherwise we would've had 16383 buckets or 14 bits)
-
-Since the offset contains the bucket as well you increase the number of buckets, but never decrease them
+method post /append?id=some_identifier returns `{"offset":0,"file":"/tmp/default/append.raw"}`
 
 ```
-$ curl -XPOST -d 'some text' 'http://localhost:8001/append?id=some_identifier'
-{"offset":14636698788954112,"file":"/tmp/append.3.raw"}
+$ curl -XPOST -d 'some text' 'http://localhost:8000/append?id=some_identifier'
+{"offset":0,"file":"/tmp/append.3.raw"}
 
-$ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8001/append?id=some_identifier'
-{"offset":14636698788954137,"file":"/tmp/append.3.raw"}
+$ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8000/append?id=some_identifier'
+{"offset":25,"file":"/tmp/default/append.raw"}
 ```
 
 ## GET
 
-method get /get?offset=14636698788954137 returns the data stored
+method get /get?offset=25 returns the data stored
 
 ```
-$ curl 'http://localhost:8001/get?offset=14636698788954137
+$ curl 'http://localhost:8000/get?offset=25
 some other data in same identifier
 ```
 
 ## MULTIGET
 method  post /getMulti the post data is binary 8 bytes per offset (LittleEndian), it reads until EOF
-so we just ask 14636698788954137,14636698788954112,14636698788954137
+so we just ask 0,25,0
 ```
-#   \x19\x00\x00\x00\x00\x00\x34\x00 (14636698788954137 in little endian)
-#   \x00\x00\x00\x00\x00\x00\x34\x00 (14636698788954112 in little endian)
-#   \x19\x00\x00\x00\x00\x00\x34\x00 (14636698788954137 in little endian)
+#   \x00\x00\x00\x00\x00\x00\x00\x00
+#   \x19\x00\x00\x00\x00\x00\x00\x00 (25 in little endian)
+#   \x00\x00\x00\x00\x00\x00\x00\x00 (0 in little endian)
 
-$ echo -n -e '\x19\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x00\x00\x34\x00\x19\x00\x00\x00\x00\x00\x34\x00' | \
-  curl -X POST --data-binary @- http://localhost:8001/getMulti
+$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
+  curl -X POST --data-binary @- http://localhost:8000/getMulti
 	some text"some other data in same identifier	some t...
 
-
-$ echo -n -e '\x19\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x00\x00\x34\x00\x19\x00\x00\x00\x00\x00\x34\x00'' | \
-  curl -s -X POST --data-binary @- http://localhost:8001/getMulti | \
+$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
+  curl -s -X POST --data-binary @- http://localhost:8002/getMulti | \
   hexdump 
-0000000 22 00 00 00 73 6f 6d 65 20 6f 74 68 65 72 20 64
-0000010 61 74 61 20 69 6e 20 73 61 6d 65 20 69 64 65 6e
-0000020 74 69 66 69 65 72 09 00 00 00 73 6f 6d 65 20 74
-0000030 65 78 74 22 00 00 00 73 6f 6d 65 20 6f 74 68 65
-0000040 72 20 64 61 74 61 20 69 6e 20 73 61 6d 65 20 69
-0000050 64 65 6e 74 69 66 69 65 72
-
+0000000 09 00 00 00 73 6f 6d 65 20 74 65 78 74 22 00 00
+0000010 00 73 6f 6d 65 20 6f 74 68 65 72 20 64 61 74 61
+0000020 20 69 6e 20 73 61 6d 65 20 69 64 65 6e 74 69 66
+0000030 69 65 72 09 00 00 00 73 6f 6d 65 20 74 65 78 74
+0000040
 
 ```
 
@@ -140,7 +129,7 @@ header makes us allocate 10gb in `output := make([]byte, dataLen)`
 
 ## SCAN
 
-scans all buckets from a namespace
+scans the file
 
 ```
 $ curl http://localhost:8000/scan?namespace=someStoragePrefix > dump.txt
