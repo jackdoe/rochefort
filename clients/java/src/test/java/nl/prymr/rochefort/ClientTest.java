@@ -49,7 +49,6 @@ public class ClientTest extends TestCase {
     for (int attempt = 0; attempt < 2; attempt++) {
 
       for (final String namespace : namespaces) {
-
         List<byte[]> everything = new ArrayList<>();
         List<Long> allOffsets = new ArrayList<>();
 
@@ -60,8 +59,6 @@ public class ClientTest extends TestCase {
           for (int size :
               new int[] {
                 1, 1, 1, 1, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
-                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
-                10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
                 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
                 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 1000, 1000,
                 10000, 100000, 1000000
@@ -79,20 +76,11 @@ public class ClientTest extends TestCase {
             stored.add(data);
 
             // make sure we never get the same offset twice
-            assertNull("we already have offset " + offset, lookupAllOffsets.get(offset));
+            assertNull(
+                "we already have offset " + offset, lookupAllOffsets.get(namespace).get(offset));
             lookupAllOffsets.get(namespace).put(offset, data);
 
             byte[] fetchedData = client.get(namespace, offset);
-            //            assertTrue(
-            //                String.format(
-            //                    "namespace:%s id:%s size: %d offset: %d expected: %s got %s",
-            //                    namespace,
-            //                    id,
-            //                    size,
-            //                    offset,
-            //                    Arrays.toString(data),
-            //                    Arrays.toString(fetchedData)),
-            //                Arrays.equals(data, fetchedData));
             assertTrue(Arrays.equals(data, fetchedData));
 
             long[] loffsets = new long[offsets.size()];
@@ -120,35 +108,11 @@ public class ClientTest extends TestCase {
           assertTrue(Arrays.equals(everything.get(i), fetched.get(i)));
         }
       }
-
-      synchronized (ClientTest.class) {
-        // no insert while we are scanning, because otherwise we cant verify everything is 100% in
-        // place
-        for (final String namespace : namespaces) {
-          client.scan(
-              namespace,
-              new Client.ScanConsumer() {
-                @Override
-                public void accept(byte[] buffer, int length, long offset) {
-                  assertNotNull(
-                      "missing offset " + offset, lookupAllOffsets.get(namespace).get(offset));
-                  byte[] tmp = Arrays.copyOf(buffer, length);
-                  byte[] stored = lookupAllOffsets.get(namespace).get(offset);
-                  //                  assertTrue(
-                  //                      String.format(
-                  //                          "offset: %d expected: %s got %s",
-                  //                          offset, Arrays.toString(tmp),Arrays.toString(stored)),
-                  //                      Arrays.equals(tmp, stored));
-                  assertTrue(Arrays.equals(tmp, stored));
-                }
-              });
-        }
-      }
     }
   }
 
   public void testManyAsync() throws Exception {
-    int threadCount = 20;
+    int threadCount = 10;
     Callable<Long> task =
         new Callable<Long>() {
           @Override
@@ -169,5 +133,25 @@ public class ClientTest extends TestCase {
       sum += f.get();
     }
     assertEquals(sum, threadCount);
+  }
+
+  @Override
+  public void tearDown() throws Exception {
+    for (final String namespace : namespaces) {
+      client.scan(
+          namespace,
+          new Client.ScanConsumer() {
+            @Override
+            public void accept(byte[] buffer, int length, long offset) {
+              assertNotNull(
+                  "missing offset " + offset + " on namespace " + namespace,
+                  lookupAllOffsets.get(namespace).get(offset));
+              byte[] tmp = Arrays.copyOf(buffer, length);
+              byte[] stored = lookupAllOffsets.get(namespace).get(offset);
+
+              assertTrue(Arrays.equals(tmp, stored));
+            }
+          });
+    }
   }
 }

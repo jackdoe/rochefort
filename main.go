@@ -358,8 +358,14 @@ func main() {
 					_, data, err := multiStore.read(namespace, offset)
 					if err == nil {
 						binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-						w.Write(dataLenRaw)
-						w.Write(data)
+						_, err = w.Write(dataLenRaw)
+						if err != nil {
+							return
+						}
+						_, err = w.Write(data)
+						if err != nil {
+							return
+						}
 					}
 				}
 			}
@@ -381,8 +387,14 @@ func main() {
 				// also the data is barely checksummed, so might very well be corrupted
 				if err == nil {
 					binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-					w.Write(dataLenRaw)
-					w.Write(data)
+					_, err = w.Write(dataLenRaw)
+					if err != nil {
+						return
+					}
+					_, err = w.Write(data)
+					if err != nil {
+						return
+					}
 				}
 			}
 
