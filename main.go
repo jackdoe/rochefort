@@ -54,7 +54,7 @@ SCAN:
 		// this is lockless, which means we could read a header,
 		// but the data might be incomplete
 
-		dataLen, err := readHeader(this.descriptor, uint64(offset))
+		dataLen, err := readHeader(this.descriptor, offset)
 		if err != nil {
 			break SCAN
 		}

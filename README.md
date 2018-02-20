@@ -22,10 +22,11 @@ docker run -e BIND=":8000" \
 ```
 
 ### parameters
-* root: root directory, files will be created at `root/namespace||default/append.%d.raw`
-* bind: address to bind to
+* root: root directory, files will be created at `root/namespace||default/append.raw`
+* bind: address to bind to (default :8000)
 
 dont forget to mount persisted root directory
+
 
 ## compile from source
 
@@ -42,7 +43,7 @@ method post /append?id=some_identifier returns `{"offset":0,"file":"/tmp/default
 
 ```
 $ curl -XPOST -d 'some text' 'http://localhost:8000/append?id=some_identifier'
-{"offset":0,"file":"/tmp/append.3.raw"}
+{"offset":0,"file":"/tmp/append.raw"}
 
 $ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8000/append?id=some_identifier'
 {"offset":25,"file":"/tmp/default/append.raw"}
