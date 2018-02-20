@@ -12,14 +12,14 @@
 
 ## run in docker
 
-run with docker: jackdoe/rochefort:0.3
+run with docker: jackdoe/rochefort:0.4
 
 ```
 docker run -e BUCKETS="10" \
            -e BIND=":8001" \
            -e ROOT="/tmp/rochefort" \
            -p 8001:8001 \
-           jackdoe/rochefort:0.3
+           jackdoe/rochefort:0.4
 ```
 
 ### parameters
@@ -179,6 +179,7 @@ nice :)
 
 ## TODO
 
+* travis-ci
 * multi append (one call, append many)
 * perl client
 * make c client that can be used from ruby/perl
