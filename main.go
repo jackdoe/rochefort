@@ -59,7 +59,8 @@ func NewStorage(root string, n int) *Storage {
 	return storage
 }
 
-func (this *Storage) scan(cb func(uint32, uint64, []byte)) {
+func (this *Storage) scan(cb func(uint32, uint64, []byte) bool) {
+MAIN:
 	for fileIdx, f := range this.files {
 	SCAN:
 		for offset := int64(0); offset < f.offset; {
@@ -76,7 +77,10 @@ func (this *Storage) scan(cb func(uint32, uint64, []byte)) {
 				break SCAN
 			}
 
-			cb(dataLen, encodedOffset(fileIdx, offset), output)
+			if !cb(dataLen, encodedOffset(fileIdx, offset), output) {
+				break MAIN
+			}
+
 			offset += int64(dataLen + headerLen)
 		}
 	}
@@ -224,7 +228,7 @@ func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, [
 	return this.find(storageIdentifier).read(offset)
 }
 
-func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, uint64, []byte)) {
+func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, uint64, []byte) bool) {
 	this.find(storageIdentifier).scan(cb)
 }
 
@@ -317,28 +321,36 @@ func main() {
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
-		multiStore.scan(r.URL.Query().Get(namespaceKey), func(dataLen uint32, offset uint64, data []byte) {
+		multiStore.scan(r.URL.Query().Get(namespaceKey), func(dataLen uint32, offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
-			w.Write(header)
-			w.Write(data)
+			_, err := w.Write(header)
+			if err != nil {
+				return false
+			}
+			_, err = w.Write(data)
+			if err != nil {
+				return false
+			}
+			return true
 		})
 	})
 
 	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
 		dataLenRaw := make([]byte, 4)
 		defer r.Body.Close()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			binary.LittleEndian.PutUint32(dataLenRaw, 0)
+			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
 			return
 		}
+
 		namespace := r.URL.Query().Get(namespaceKey)
 
 		if r.URL.Query().Get("csv") == "true" {
+			w.Header().Set("Content-Type", "application/octet-stream")
 			csv := string(b)
 			for _, v := range strings.Split(csv, ",") {
 				offset, err := strconv.ParseUint(v, 10, 64)
@@ -353,6 +365,13 @@ func main() {
 			}
 
 		} else {
+			if len(b)%8 != 0 {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(fmt.Sprintf("incomplete read: %d is not multiple of 8", len(b))))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/octet-stream")
 			for i := 0; i < len(b); i += 8 {
 				offset := binary.LittleEndian.Uint64(b[i:])
 				_, data, err := multiStore.read(namespace, offset)

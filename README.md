@@ -91,17 +91,10 @@ $ echo -n -e '\x19\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x00\x00\x34\x00\x
 
 ```
 
-
 output:
 
 ```
 [4 bytes length (LittleEndian)][data][4 bytes length (LittleEndian)][data]
-```
-
-in case of error length is 0 and what follows is the error text
-
-```
-[4 bytes length (LittleEndian)][data][\0\0\0\0\0 (4 bytes of 0)]error text
 ```
 
 the protocol is very simple, it stores the length of the item in 4 bytes:
