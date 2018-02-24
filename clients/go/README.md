@@ -19,7 +19,7 @@ import (
 func main() {
 	r := rochefort.NewClient("http://localhost:8002", nil)
 
-	offset, _ := r.Append("namespace", "id123", []byte("some data"))
+	offset, _ := r.Append("namespace", 0, []byte("some data"))
 	fetched, _ := r.Get("namespace", offset)
 	log.Printf("fetched: %s", string(fetched))
 }
