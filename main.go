@@ -15,6 +15,7 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -54,7 +55,7 @@ SCAN:
 		// this is lockless, which means we could read a header,
 		// but the data might be incomplete
 
-		dataLen, err := readHeader(this.descriptor, offset)
+		dataLen, _, allocSize, err := readHeader(this.descriptor, offset)
 		if err != nil {
 			break SCAN
 		}
@@ -68,34 +69,50 @@ SCAN:
 			break SCAN
 		}
 
-		offset += uint64(dataLen) + uint64(headerLen)
+		offset += uint64(allocSize) + uint64(headerLen)
 	}
 }
 
-const headerLen = 4 + 8 + 4
+const headerLen = 4 + 8 + 4 + 4
 
-func readHeader(file *os.File, offset uint64) (uint32, error) {
+func readHeader(file *os.File, offset uint64) (uint32, uint64, uint32, error) {
 	headerBytes := make([]byte, headerLen)
 	_, err := file.ReadAt(headerBytes, int64(offset))
 	if err != nil {
-		return 0, err
+		return 0, 0, 0, err
 	}
 	dataLen := binary.LittleEndian.Uint32(headerBytes[0:])
-
-	// no need for it
-	// timeNano := binary.LittleEndian.Uint64(headerBytes[4:])
-
-	checksum := binary.LittleEndian.Uint32(headerBytes[12:])
-
-	if checksum != crc(headerBytes[0:12]) {
-		return 0, errors.New("wrong checksum")
+	nextBlock := binary.LittleEndian.Uint64(headerBytes[4:])
+	allocSize := binary.LittleEndian.Uint32(headerBytes[12:])
+	checksum := binary.LittleEndian.Uint32(headerBytes[16:])
+	computedChecksum := crc(headerBytes[0:16])
+	if checksum != computedChecksum {
+		return 0, 0, 0, errors.New(fmt.Sprintf("wrong checksum got: %d, expected: %d", computedChecksum, checksum))
 	}
-	return dataLen, nil
+	return dataLen, nextBlock, allocSize, nil
+}
+
+func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, nextBlockOffset uint64, allocSize uint32) {
+
+	header := make([]byte, headerLen)
+
+	binary.LittleEndian.PutUint32(header[0:], uint32(dataLen))
+	binary.LittleEndian.PutUint64(header[4:], uint64(0))
+	binary.LittleEndian.PutUint32(header[12:], allocSize)
+
+	checksum := crc(header[0:16])
+	binary.LittleEndian.PutUint32(header[16:], checksum)
+
+	_, err := this.descriptor.WriteAt(header, int64(currentOffset))
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (this *StoreItem) read(offset uint64) (uint32, []byte, error) {
 	// lockless read
-	dataLen, err := readHeader(this.descriptor, offset)
+	dataLen, _, _, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -108,36 +125,54 @@ func (this *StoreItem) read(offset uint64) (uint32, []byte, error) {
 	return dataLen, output, nil
 }
 
-func (this *StoreItem) append(sid string, data io.Reader) (uint64, string, error) {
+func (this *StoreItem) append(allocSize uint32, data io.Reader) (uint64, error) {
 	dataRaw, err := ioutil.ReadAll(data)
 	if err != nil {
-		return 0, "", err
+		return 0, err
 	}
 
-	this.Lock()
-	currentOffset := this.offset
-	this.offset += uint64(len(dataRaw) + headerLen)
-	this.Unlock()
+	if len(dataRaw) > int(allocSize) {
+		allocSize = uint32(len(dataRaw))
+	}
 
+	offset := atomic.AddUint64(&this.offset, uint64(allocSize+headerLen))
+
+	currentOffset := offset - uint64(allocSize+headerLen)
 	_, err = this.descriptor.WriteAt(dataRaw, int64(currentOffset+headerLen))
 	if err != nil {
 		panic(err)
 	}
 
-	// first write the data, then the header
-	header := make([]byte, headerLen)
-	binary.LittleEndian.PutUint32(header[0:], uint32(len(dataRaw)))
-	binary.LittleEndian.PutUint64(header[4:], uint64(time.Now().UnixNano()))
+	this.writeHeader(currentOffset, uint32(len(dataRaw)), 0, allocSize)
 
-	checksum := crc(header[0:12])
-	binary.LittleEndian.PutUint32(header[12:], checksum)
+	return currentOffset, nil
+}
 
-	_, err = this.descriptor.WriteAt(header, int64(currentOffset))
+func (this *StoreItem) modify(offset uint64, pos uint32, data io.Reader) error {
+	dataRaw, err := ioutil.ReadAll(data)
+	if err != nil {
+		return err
+	}
+
+	oldDataLen, _, allocSize, err := readHeader(this.descriptor, offset)
+	if err != nil {
+		return err
+	}
+	end := pos + uint32(len(dataRaw))
+	if end >= allocSize {
+		return errors.New("pos+len >= allocSize")
+	}
+
+	_, err = this.descriptor.WriteAt(dataRaw, int64(offset+uint64(headerLen)+uint64(pos)))
 	if err != nil {
 		panic(err)
 	}
 
-	return currentOffset, this.path, nil
+	if end > oldDataLen {
+		// need to recompute the header
+		this.writeHeader(offset, end, 0, allocSize)
+	}
+	return nil
 }
 
 func crc(b []byte) uint32 {
@@ -185,8 +220,12 @@ func (this *MultiStore) close(storageIdentifier string) {
 	delete(this.stores, storageIdentifier)
 }
 
-func (this *MultiStore) append(storageIdentifier, sid string, data io.Reader) (uint64, string, error) {
-	return this.find(storageIdentifier).append(sid, data)
+func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos uint32, data io.Reader) error {
+	return this.find(storageIdentifier).modify(offset, pos, data)
+}
+
+func (this *MultiStore) append(storageIdentifier string, allocSize uint32, data io.Reader) (uint64, error) {
+	return this.find(storageIdentifier).append(allocSize, data)
 }
 
 func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, []byte, error) {
@@ -210,7 +249,8 @@ func Log(handler http.Handler) http.Handler {
 }
 
 const namespaceKey = "namespace"
-const idKey = "id"
+const posKey = "pos"
+const allocSizeKey = "allocSize"
 const offsetKey = "offset"
 
 func main() {
@@ -244,14 +284,49 @@ func main() {
 		w.Write([]byte("{\"success\":true}"))
 	})
 
+	http.HandleFunc("/modify", func(w http.ResponseWriter, r *http.Request) {
+		offset, err := strconv.ParseUint(r.URL.Query().Get(offsetKey), 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			pos, err := strconv.ParseUint(r.URL.Query().Get(posKey), 10, 32)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+			} else {
+				err := multiStore.modify(r.URL.Query().Get(namespaceKey), offset, uint32(pos), r.Body)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte(err.Error()))
+				} else {
+					w.Header().Set("Content-Type", "application/json")
+					w.Write([]byte("{\"success\":\"true\"}"))
+				}
+			}
+		}
+	})
+
 	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		offset, file, err := multiStore.append(r.URL.Query().Get(namespaceKey), r.URL.Query().Get(idKey), r.Body)
+		allocSize := uint64(0)
+		if r.URL.Query().Get(allocSizeKey) != "" {
+			allocSizeInput, err := strconv.ParseUint(r.URL.Query().Get(allocSizeKey), 10, 64)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			} else {
+				allocSize = allocSizeInput
+			}
+		}
+
+		offset, err := multiStore.append(r.URL.Query().Get(namespaceKey), uint32(allocSize), r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(fmt.Sprintf("{\"offset\":%d,\"file\":\"%s\"}", offset, file)))
+			w.Write([]byte(fmt.Sprintf("{\"offset\":%d}", offset)))
 		}
 	})
 

@@ -15,12 +15,40 @@ class RochefortTest < Minitest::Unit::TestCase
         1.upto(10) do |id|
           1.upto(10) do |suffix|
             data = SecureRandom.random_bytes(suffix * 100)
-            offset = r.append(namespace: ns,id: id,data: data)
+            offset = r.append(namespace: ns, alloc_size: data.length * 2, data: data)
             fetched = r.get(namespace: ns, offset: offset)
 
             assert_equal data,fetched
             many = r.getMulti(namespace: ns,offsets: [offset,offset,offset,offset])
             assert_equal many,[data,data,data,data]
+
+            # test modification head
+            r.modify(namespace: ns, offset: offset, position: 0, data: "abc")
+            fetchedAfter = r.get(namespace: ns, offset: offset)
+            fetched[0,3] = 'abc'
+            assert_equal fetched,fetchedAfter
+
+
+            # test modification tail
+            r.modify(namespace: ns, offset: offset, position: data.length - 4, data: "abcd")
+            fetchedAfter = r.get(namespace: ns, offset: offset)
+            fetched[fetched.length - 4, 4] = 'abcd'
+            assert_equal fetched,fetchedAfter
+
+            # test modification outside
+            r.modify(namespace: ns, offset: offset, position: data.length, data: "abcde")
+            fetchedAfter = r.get(namespace: ns, offset: offset)
+            fetched << 'abcde'
+            assert_equal fetched,fetchedAfter
+
+
+            # test modification near end of allocSize
+            r.modify(namespace: ns, offset: offset, position: (data.length * 2) - 4, data: "zxc")
+            fetchedAfter = r.get(namespace: ns, offset: offset)
+            fetched[fetched.length, (data.length * 2) - fetched.length - 4] = "\x00" * ((data.length * 2) - fetched.length - 4)
+            fetched << 'zxc'
+            assert_equal fetched,fetchedAfter
+            
 
             everything_so_far[offset] = fetched
 
