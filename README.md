@@ -12,13 +12,27 @@
 
 ## run in docker
 
-run with docker: jackdoe/rochefort:0.5
+run with docker: jackdoe/rochefort:1.0
 
 ```
 docker run -e BIND=":8000" \
            -e ROOT="/tmp/rochefort" \
            -p 8000:8000 \
-           jackdoe/rochefort:0.5
+           jackdoe/rochefort:1.0
+```
+
+
+## breaking change between 0.5 and 1.0
+
+* added 4 more bytes in the header
+* the -buckets parameter is gone, so everything is appended in one file per namespace
+
+you can migrate your data by doing:
+
+```
+oldServer.scan(namespace: ns) do |len, offset, v|
+  newServer.append(namespace:ns, data: v)
+end
 ```
 
 ### parameters
