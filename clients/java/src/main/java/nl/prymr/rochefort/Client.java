@@ -17,7 +17,7 @@ import static nl.prymr.rochefort.Util.convertStreamToString;
 import static nl.prymr.rochefort.Util.readFully;
 
 public class Client {
-  private String urlGetMulti, urlGet, urlAppend, urlScan;
+  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -39,14 +39,15 @@ public class Client {
     this.urlGet = prefix + "get";
     this.urlGetMulti = prefix + "getMulti";
     this.urlAppend = prefix + "append";
+    this.urlModify = prefix + "modify";
     this.urlScan = prefix + "scan";
   }
 
-  public static long append(String urlSet, String namespace, String id, byte[] data)
+  public static long append(String urlSet, String namespace, int allocSize, byte[] data)
       throws Exception {
     HttpResponse<InputStream> response =
         Unirest.post(urlSet)
-            .queryString("id", id)
+            .queryString("allocSize", allocSize)
             .queryString("namespace", namespace)
             .body(data)
             .asBinary();
@@ -62,6 +63,28 @@ public class Client {
     byte[] ret = readFully(response.getBody(), -1, true);
 
     return new JsonNode(new String(ret)).getObject().getLong("offset");
+  }
+
+  public static boolean modify(
+      String urlModify, String namespace, long offset, int position, byte[] data) throws Exception {
+    HttpResponse<InputStream> response =
+        Unirest.post(urlModify)
+            .queryString("pos", position)
+            .queryString("offset", offset)
+            .queryString("namespace", namespace)
+            .body(data)
+            .asBinary();
+    if (response.getStatus() != 200) {
+      throw new Exception(
+          "status code "
+              + response.getStatus()
+              + " url: "
+              + urlModify
+              + " body: "
+              + convertStreamToString(response.getRawBody()));
+    }
+    byte[] ret = readFully(response.getBody(), -1, true);
+    return new JsonNode(new String(ret)).getObject().getBoolean("success");
   }
 
   public static List<byte[]> getMulti(String urlGetMulti, String namespace, long[] listOfOffsets)
@@ -193,12 +216,28 @@ public class Client {
     }
   }
 
-  public long append(String id, byte[] data) throws Exception {
-    return append("", id, data);
+  public boolean modify(long offset, int position, byte[] data) throws Exception {
+    return modify("", offset, position, data);
   }
 
-  public long append(String namespace, String id, byte[] data) throws Exception {
-    return append(this.urlAppend, namespace, id, data);
+  public boolean modify(String namespace, long offset, int position, byte[] data) throws Exception {
+    return modify(this.urlModify, namespace, offset, position, data);
+  }
+
+  public long append(byte[] data) throws Exception {
+    return append("", 0, data);
+  }
+
+  public long append(int allocSize, byte[] data) throws Exception {
+    return append("", allocSize, data);
+  }
+
+  public long append(String namespace, byte[] data) throws Exception {
+    return append(namespace, 0, data);
+  }
+
+  public long append(String namespace, int allocSize, byte[] data) throws Exception {
+    return append(this.urlAppend, namespace, allocSize, data);
   }
 
   public byte[] get(long offset) throws Exception {

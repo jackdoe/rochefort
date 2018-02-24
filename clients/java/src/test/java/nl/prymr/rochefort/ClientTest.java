@@ -43,6 +43,17 @@ public class ClientTest extends TestCase {
     }
   }
 
+  public void testModify() throws Exception {
+    long offset = client.append(1024, "abc".getBytes());
+    assertEquals(new String(client.get(offset)), "abc");
+
+    client.modify(offset, 1, "xyz".getBytes());
+
+    assertEquals(new String(client.get(offset)), "axyz");
+
+    lookupAllOffsets.get("").put(offset, client.get(offset));
+  }
+
   public void testApp() throws Exception {
     Random random = new Random(System.currentTimeMillis());
 
@@ -53,7 +64,6 @@ public class ClientTest extends TestCase {
         List<Long> allOffsets = new ArrayList<>();
 
         for (String id : new String[] {"abc", "abcd", "abcdef"}) {
-          id = id + random.nextFloat();
           List<Long> offsets = new ArrayList<Long>();
           List<byte[]> stored = new ArrayList<byte[]>();
           for (int size :
@@ -71,7 +81,7 @@ public class ClientTest extends TestCase {
             bos.flush();
 
             byte[] data = bos.toByteArray();
-            long offset = client.append(namespace, id, data);
+            long offset = client.append(namespace, data);
             offsets.add(offset);
             stored.add(data);
 
