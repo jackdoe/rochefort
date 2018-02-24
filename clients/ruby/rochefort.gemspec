@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = 'rochefort'
-  s.version     = '0.0.4'
+  s.version     = '0.1.0'
   s.date        = '2018-02-15'
   s.summary     = "client for rochefort storage service"
   s.description = "rochefort is fast data append service that returns offsets to be indexed"
