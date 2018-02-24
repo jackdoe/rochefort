@@ -2,7 +2,6 @@ var assert = require('assert')
 const rochefort = require('./index.js')
 var o
 
-
 data = new Buffer.alloc(1024 * 1024 * 10)
 r = new rochefort('http://localhost:8002')
 r.append({data: data}).then(offset => {
@@ -17,6 +16,23 @@ r.append({data: data}).then(offset => {
     for (var i = 0; i < v.length; i++) {
         assert.equal(0, Buffer.compare(v[i],data))
     }
+}).catch(e => {
+    console.log(e)
+})
+
+
+var o1
+r.append({data: 'abcd', allocSize: 5}).then(offset => {
+    o1 = offset
+    return r.modify({
+        data: 'xyz',
+        offset: offset,
+        position: 1
+    })
+}).then(() => {
+    return r.get({offset: o1})
+}).then(value => {
+    assert.equal(value, 'axyz')
 }).catch(e => {
     console.log(e)
 })

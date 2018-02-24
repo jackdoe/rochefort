@@ -8,6 +8,7 @@ const append = function append(args) {
         url: new URL('append',args.url).toString(),
         params: {
             namespace: args.namespace,
+            allocSize: args.allocSize,
         },
         timeout: args.timeout || 1000,
         data: args.data
@@ -15,6 +16,24 @@ const append = function append(args) {
         return r.data.offset
     })
 }
+
+
+const modify = function append(args) {
+    return axios({
+        method: 'get',
+        url: new URL('modify',args.url).toString(),
+        params: {
+            namespace: args.namespace,
+            pos: args.position,
+            offset: args.offset,
+        },
+        timeout: args.timeout || 1000,
+        data: args.data
+    }).then((r) => {
+        return r.data.success
+    })
+}
+
 
 const get = function get(args) {
     return axios({
@@ -78,6 +97,10 @@ const rochefort = function(url) {
 
     this.append = function(args) {
         return append({...args, url: this.url})
+    }
+
+    this.modify = function(args) {
+        return modify({...args, url: this.url})
     }
 
     this.getMulti = function(args) {
