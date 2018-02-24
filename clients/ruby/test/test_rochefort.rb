@@ -48,7 +48,7 @@ class RochefortTest < Minitest::Unit::TestCase
             fetched[fetched.length, (data.length * 2) - fetched.length - 4] = "\x00" * ((data.length * 2) - fetched.length - 4)
             fetched << 'zxc'
             assert_equal fetched,fetchedAfter
-            
+
 
             everything_so_far[offset] = fetched
 
