@@ -159,8 +159,8 @@ func (this *StoreItem) modify(offset uint64, pos uint32, data io.Reader) error {
 		return err
 	}
 	end := pos + uint32(len(dataRaw))
-	if end >= allocSize {
-		return errors.New("pos+len >= allocSize")
+	if end > allocSize {
+		return errors.New("pos+len > allocSize")
 	}
 
 	_, err = this.descriptor.WriteAt(dataRaw, int64(offset+uint64(headerLen)+uint64(pos)))
@@ -256,6 +256,7 @@ const offsetKey = "offset"
 func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp/rochefort", "root directory")
+	var pquiet = flag.Bool("quiet", false, "dont print any log messages")
 	flag.Parse()
 
 	multiStore := &MultiStore{
@@ -301,7 +302,7 @@ func main() {
 					w.Write([]byte(err.Error()))
 				} else {
 					w.Header().Set("Content-Type", "application/json")
-					w.Write([]byte("{\"success\":\"true\"}"))
+					w.Write([]byte("{\"success\":true}"))
 				}
 			}
 		}
@@ -406,10 +407,17 @@ func main() {
 			}
 		}
 	})
+	if !*pquiet {
+		log.Printf("starting http server on %s", *pbind)
+		err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		err := http.ListenAndServe(*pbind, http.DefaultServeMux)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	log.Printf("starting http server on %s", *pbind)
-	err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
-	if err != nil {
-		log.Fatal(err)
 	}
 }

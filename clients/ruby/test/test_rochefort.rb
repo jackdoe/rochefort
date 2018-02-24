@@ -43,9 +43,9 @@ class RochefortTest < Minitest::Unit::TestCase
 
 
             # test modification near end of allocSize
-            r.modify(namespace: ns, offset: offset, position: (data.length * 2) - 4, data: "zxc")
+            r.modify(namespace: ns, offset: offset, position: (data.length * 2) - 3, data: "zxc")
             fetchedAfter = r.get(namespace: ns, offset: offset)
-            fetched[fetched.length, (data.length * 2) - fetched.length - 4] = "\x00" * ((data.length * 2) - fetched.length - 4)
+            fetched[fetched.length, (data.length * 2) - fetched.length - 3] = "\x00" * ((data.length * 2) - fetched.length - 3)
             fetched << 'zxc'
             assert_equal fetched,fetchedAfter
 
