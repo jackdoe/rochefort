@@ -5,7 +5,7 @@
 
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
-* supports: **append, get, multiget, close**
+* supports: **append, modify, get, multiget, close**
 * clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
 
 ---
@@ -37,16 +37,34 @@ $ go run main.go -bind :8000 -root /tmp
 
 ```
 
-## STORE
+## APPEND
 
-method post /append?id=some_identifier returns `{"offset":0,"file":"/tmp/default/append.raw"}`
+method post /append?allocSize=0 returns `{"offset":0}`
+
+you can pass allocSize so you can reserve space for in-place modifications later
 
 ```
-$ curl -XPOST -d 'some text' 'http://localhost:8000/append?id=some_identifier'
-{"offset":0,"file":"/tmp/append.raw"}
+$ curl -XPOST -d 'some text' 'http://localhost:8000/append?allocSize=1024'
+{"offset":0}
 
-$ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8000/append?id=some_identifier'
-{"offset":25,"file":"/tmp/default/append.raw"}
+$ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8000/append'
+{"offset":1044}
+```
+
+as you can see the offset for the second blob is 1024 bytes + header(20 bytes) away from the first blob
+
+## MODIFY
+method post /modify?offset=X&pos=Y returns `{"success":"true"}`
+
+inplace modifies position, for example if we want to replace 'some'
+with 'szze' in the blob we appended at offset 0, we modify rochefort
+offset 0 with 'zz' from position 1
+
+```
+$ curl -XPOST -d 'zz' 'http://localhost:8000/modify?offset=0&pos=1'
+{"success":"true"}
+$ curl http://localhost:8000/get?offset=0
+szze text
 ```
 
 ## GET
@@ -60,17 +78,17 @@ some other data in same identifier
 
 ## MULTIGET
 method  post /getMulti the post data is binary 8 bytes per offset (LittleEndian), it reads until EOF
-so we just ask 0,25,0
+so we just ask 0,29,0
 ```
 #   \x00\x00\x00\x00\x00\x00\x00\x00
-#   \x19\x00\x00\x00\x00\x00\x00\x00 (25 in little endian)
+#   \x1D\x00\x00\x00\x00\x00\x00\x00 (29 in little endian)
 #   \x00\x00\x00\x00\x00\x00\x00\x00 (0 in little endian)
 
-$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
+$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x1D\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
   curl -X POST --data-binary @- http://localhost:8000/getMulti
 	some text"some other data in same identifier	some t...
 
-$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
+$ echo -n -e '\x00\x00\x00\x00\x00\x00\x00\x00\x1D\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' | \
   curl -s -X POST --data-binary @- http://localhost:8002/getMulti | \
   hexdump 
 0000000 09 00 00 00 73 6f 6d 65 20 74 65 78 74 22 00 00
@@ -114,11 +132,12 @@ $ curl http://localhost:8000/close?namespace=events_from_20171112
 ```
 header is 16 bytes
 D: data length: 4 bytes
-T: current time in nanosecond: 8 bytes
+R: reserved: 8 bytes
+A: allocSize: 4 bytes
 C: crc32(length, time): 4 bytes
 V: the stored value
 
-DDDDTTTTTTTTCCCCVVVVVVVVVVVVVVVVVVVV...DDDDTTTTTTTTCCCCVVVVVV....
+DDDDRRRRRRRRAAAACCCCVVVVVVVVVVVVVVVVVVVV...DDDDRRRRRRRRAAAACCCCVVVVVV....
 
 ```
 
@@ -165,6 +184,10 @@ it for our quite big write and very big multi-read load.
 Keep in mind that there is some not-invented-here syndrome involved
 into making it, but I use the service in production and it works very
 nice :)
+
+### non atomic modify
+there is race between reading and modification from the client prespective
+
 
 
 ## TODO
