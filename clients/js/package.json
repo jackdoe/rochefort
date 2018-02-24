@@ -1,6 +1,6 @@
 {
   "name": "rochefort",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "client for rochefort - fast data append service that returns offsets to be indexed",
   "main": "index.js",
   "scripts": {
