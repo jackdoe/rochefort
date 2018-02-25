@@ -148,7 +148,7 @@ func (this *StoreItem) append(allocSize uint32, data io.Reader) (uint64, error) 
 	return currentOffset, nil
 }
 
-func (this *StoreItem) modify(offset uint64, pos uint32, data io.Reader) error {
+func (this *StoreItem) modify(offset uint64, pos int32, data io.Reader) error {
 	dataRaw, err := ioutil.ReadAll(data)
 	if err != nil {
 		return err
@@ -158,7 +158,12 @@ func (this *StoreItem) modify(offset uint64, pos uint32, data io.Reader) error {
 	if err != nil {
 		return err
 	}
-	end := pos + uint32(len(dataRaw))
+
+	if pos < 0 {
+		pos = int32(oldDataLen)
+	}
+
+	end := uint32(pos) + uint32(len(dataRaw))
 	if end > allocSize {
 		return errors.New("pos+len > allocSize")
 	}
@@ -220,7 +225,7 @@ func (this *MultiStore) close(storageIdentifier string) {
 	delete(this.stores, storageIdentifier)
 }
 
-func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos uint32, data io.Reader) error {
+func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos int32, data io.Reader) error {
 	return this.find(storageIdentifier).modify(offset, pos, data)
 }
 
@@ -291,12 +296,12 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-			pos, err := strconv.ParseUint(r.URL.Query().Get(posKey), 10, 32)
+			pos, err := strconv.ParseInt(r.URL.Query().Get(posKey), 10, 32)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
 			} else {
-				err := multiStore.modify(r.URL.Query().Get(namespaceKey), offset, uint32(pos), r.Body)
+				err := multiStore.modify(r.URL.Query().Get(namespaceKey), offset, int32(pos), r.Body)
 				if err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					w.Write([]byte(err.Error()))

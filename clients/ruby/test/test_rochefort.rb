@@ -36,7 +36,7 @@ class RochefortTest < Minitest::Unit::TestCase
             assert_equal fetched,fetchedAfter
 
             # test modification outside
-            r.modify(namespace: ns, offset: offset, position: data.length, data: "abcde")
+            r.modify(namespace: ns, offset: offset, position: -1, data: "abcde")
             fetchedAfter = r.get(namespace: ns, offset: offset)
             fetched << 'abcde'
             assert_equal fetched,fetchedAfter
@@ -53,7 +53,7 @@ class RochefortTest < Minitest::Unit::TestCase
             everything_so_far[offset] = fetched
 
             matching = 0
-            r.scan(namespace: ns) do |len, offset, v|
+            r.scan(namespace: ns, open_timeout: 10) do |len, offset, v|
               if !everything_so_far[offset]
                 raise "expected ${offset}"
               end
