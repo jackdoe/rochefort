@@ -2,6 +2,16 @@ require 'minitest/autorun'
 require 'rochefort'
 require 'securerandom'
 class RochefortTest < Minitest::Unit::TestCase
+  def test_empty
+    url = ENV["ROCHEFORT_TEST"]
+    if url
+      r = Rochefort.new(url)
+      offset = r.append(namespace: 'empty', alloc_size: 1024, data: '')
+      fetched = r.get(namespace: 'empty', offset: offset)
+      assert_equal fetched,''
+    end
+  end
+
   def test_rochefort
     url = ENV["ROCHEFORT_TEST"]
     r = Rochefort.new(url)
