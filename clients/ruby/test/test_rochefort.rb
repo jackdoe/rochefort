@@ -12,6 +12,46 @@ class RochefortTest < Minitest::Unit::TestCase
     end
   end
 
+  def test_search
+    url = ENV["ROCHEFORT_TEST"]
+    if url
+      r = Rochefort.new(url)
+
+      a = []
+      b = []
+      ns = 'search'
+      a << r.append(namespace: ns, data: 'aaa', tags: ['a'])
+      a << r.append(namespace: ns, data: 'aaa2', tags: ['a','b'])
+      a << r.append(namespace: ns, data: 'aaa3', tags: ['a','b','c'])
+
+      b << r.append(namespace: ns, data: 'bbb', tags: ['b'])
+      b << r.append(namespace: ns, data: 'bbb2', tags: ['a','b'])
+      b << r.append(namespace: ns, data: 'bbb3', tags: ['a','b','c'])
+
+
+      aa = []
+      bb = []
+      ab = []
+      r.scan(namespace: ns, tags: ['a']) do |len, offset, v|
+        aa << v
+      end
+
+      r.scan(namespace: ns, tags: ['b']) do |len, offset, v|
+        bb << v
+      end
+
+      r.scan(namespace: ns, tags: ['a', 'b']) do |len, offset, v|
+        ab << v
+      end
+
+
+      assert_equal(aa, ['aaa','aaa2','aaa3','bbb2','bbb3'])
+      assert_equal(bb, ['aaa2','aaa3','bbb','bbb2','bbb3'])
+      assert_equal(ab, ['aaa','aaa2','aaa3','bbb','bbb2','bbb3'])
+    end
+  end
+
+
   def test_rochefort
     url = ENV["ROCHEFORT_TEST"]
     r = Rochefort.new(url)

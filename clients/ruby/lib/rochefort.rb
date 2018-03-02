@@ -28,8 +28,9 @@ class Rochefort
   #  )
   # @return the offset at which the data was stored
   def append(opts)
+    tags = opts[:tags] || []
     data = RestClient::Request.execute(method: :post,
-                                       url: "#{@urlAppend}?namespace=#{opts[:namespace]}&allocSize=#{opts[:alloc_size]}",
+                                       url: "#{@urlAppend}?namespace=#{opts[:namespace]}&allocSize=#{opts[:alloc_size]}&tags=#{tags.join(",")}",
                                        payload: opts[:data],
                                        read_timeout: opts[:read_timeout] || 1,
                                        open_timeout: opts[:open_timeout] || 1)
@@ -103,6 +104,7 @@ class Rochefort
   end
 
   # scans a namespace, reading from a stream, so the namespace can be very big
+  # also accepts array of tags to search for
   #  r = Rochefort.new(url)
   #  r.scan(namespace: ns) do |len, offset, value|
   #    puts value
@@ -142,8 +144,9 @@ class Rochefort
       end
     end
 
+    tags = opts[:tags] || []
     RestClient::Request.execute(method: :get,
-                                url: "#{@urlScan}?namespace=#{opts[:namespace]}",
+                                url: "#{@urlScan}?namespace=#{opts[:namespace]}&tags=#{tags.join(",")}",
                                 read_timeout: opts[:read_timeout] || 1,
                                 open_timeout: opts[:open_timeout] || 1,
                                 block_response: block)

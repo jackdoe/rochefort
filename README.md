@@ -67,6 +67,11 @@ $ curl -XPOST -d 'some other data in same identifier' 'http://localhost:8000/app
 
 as you can see the offset for the second blob is 1024 bytes + header(20 bytes) away from the first blob
 
+### inverted index
+passing &tags=a,b,c to /append will create postings lists in the namespace
+a.postings, b.postings and c.postings, later you can scan only specific tags with /scan
+
+
 ## MODIFY
 method post /modify?offset=X&pos=Y returns `{"success":"true"}`
 
@@ -171,6 +176,9 @@ $ curl http://localhost:8000/scan?namespace=someStoragePrefix > dump.txt
 
 the format is
 [len 4 bytes(little endian)][offset 8 bytes little endian)]data...[len][offset]data
+
+### inverted index
+pass tags=a,b,c and you can search for blobs indexed in a OR b OR c
 
 
 ## LICENSE

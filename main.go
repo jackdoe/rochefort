@@ -202,7 +202,6 @@ SCAN:
 				offsets[i] = postings[i].readAtIndex(positions[i])
 				if offsets[i] < newMinOffset {
 					newMinOffset = offsets[i]
-					log.Printf("new min offset: %d", newMinOffset)
 				}
 			}
 		}
