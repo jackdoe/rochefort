@@ -13,18 +13,48 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 )
 
-type StoreItem struct {
-	path       string
+type PostingsList struct {
 	descriptor *os.File
 	offset     uint64
+}
+
+type StoreItem struct {
+	path       string
+	root       string
+	descriptor *os.File
+	index      map[string]*PostingsList
+	offset     uint64
 	sync.Mutex
+}
+
+var nonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+func sanitize(s string) string {
+	return nonAlphaNumeric.ReplaceAllLiteralString(s, "")
+}
+
+func openAtEnd(filePath string) (*os.File, uint64) {
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		panic(err)
+	}
+	offset, err := f.Seek(0, 2)
+
+	if err != nil {
+		panic(err)
+	}
+
+	log.Printf("openning: %s with offset: %d", filePath, offset)
+	return f, uint64(offset)
 }
 
 func NewStorage(root string) *StoreItem {
@@ -40,13 +70,50 @@ func NewStorage(root string) *StoreItem {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("openning: %s with offset: %d", filePath, offset)
+
 	si := &StoreItem{
 		offset:     uint64(offset),
 		path:       filePath,
+		index:      map[string]*PostingsList{},
 		descriptor: f,
+		root:       root,
 	}
+
+	files, err := ioutil.ReadDir(root)
+	if err != nil {
+		panic(err)
+	}
+	for _, dirFile := range files {
+		if strings.HasSuffix(dirFile.Name(), ".postings") {
+			dot := strings.IndexRune(dirFile.Name(), '.')
+			idxName := dirFile.Name()[:dot]
+			si.CreatePostingsList(idxName)
+		}
+	}
+
 	return si
+}
+
+func (this *StoreItem) CreatePostingsList(name string) *PostingsList {
+	name = sanitize(name)
+	if p, ok := this.index[name]; ok {
+		return p
+	}
+
+	this.Lock()
+	defer this.Unlock()
+
+	if p, ok := this.index[name]; ok {
+		return p
+	}
+
+	f, offset := openAtEnd(path.Join(this.root, fmt.Sprintf("%s.postings", name)))
+	p := &PostingsList{
+		descriptor: f,
+		offset:     offset,
+	}
+	this.index[name] = p
+	return p
 }
 
 func (this *StoreItem) scan(cb func(uint32, uint64, []byte) bool) {
@@ -93,7 +160,6 @@ func readHeader(file *os.File, offset uint64) (uint32, uint64, uint32, error) {
 }
 
 func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, nextBlockOffset uint64, allocSize uint32) {
-
 	header := make([]byte, headerLen)
 
 	binary.LittleEndian.PutUint32(header[0:], uint32(dataLen))
@@ -108,6 +174,17 @@ func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, nextBlo
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (this *StoreItem) appendPostings(name string, value uint64) {
+	p := this.CreatePostingsList(name)
+
+	data := make([]byte, 8)
+	binary.LittleEndian.PutUint64(data, value)
+
+	// add it to the end
+	offset := atomic.AddUint64(&p.offset, uint64(8)) - 8
+	p.descriptor.WriteAt(data, int64(offset))
 }
 
 func (this *StoreItem) read(offset uint64) (uint32, []byte, error) {
@@ -325,12 +402,22 @@ func main() {
 				allocSize = allocSizeInput
 			}
 		}
-
-		offset, err := multiStore.append(r.URL.Query().Get(namespaceKey), uint32(allocSize), r.Body)
+		store := multiStore.find(r.URL.Query().Get(namespaceKey))
+		offset, err := store.append(uint32(allocSize), r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
+
+			tags := r.URL.Query().Get("tags")
+			if tags != "" {
+				splitted := strings.Split(tags, ",")
+				for _, s := range splitted {
+					if s != "" {
+						store.appendPostings(s, offset)
+					}
+				}
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(fmt.Sprintf("{\"offset\":%d}", offset)))
 		}
