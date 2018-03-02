@@ -43,6 +43,24 @@ public class ClientTest extends TestCase {
     }
   }
 
+  public void testSearch() throws Exception {
+    client.append("search", new String[] {"jaz"}, "abc".getBytes());
+    client.append("search", new String[] {"jaz"}, "zzz".getBytes());
+
+    final List<String> matching = new ArrayList<>();
+    client.scan(
+        "search",
+        new String[] {"jaz"},
+        new Client.ScanConsumer() {
+          @Override
+          public void accept(byte[] buffer, int length, long rochefortOffset) throws Exception {
+            matching.add(new String(Arrays.copyOfRange(buffer, 0, length)));
+          }
+        });
+    assertEquals(matching.get(0), "abc");
+    assertEquals(matching.get(1), "zzz");
+  }
+
   public void testModify() throws Exception {
     long offset = client.append(1024, "abc".getBytes());
     assertEquals(new String(client.get(offset)), "abc");

@@ -3,7 +3,7 @@ const rochefort = require('./index.js')
 var o
 
 data = new Buffer.alloc(1024 * 1024 * 10)
-r = new rochefort('http://localhost:8002')
+r = new rochefort('http://localhost:8000')
 r.append({data: data}).then(offset => {
     o = offset
     return r.get({offset: offset})

@@ -43,12 +43,28 @@ public class Client {
     this.urlScan = prefix + "scan";
   }
 
-  public static long append(String urlSet, String namespace, int allocSize, byte[] data)
-      throws Exception {
+  public static String join(String join, String... strings) {
+    if (strings == null || strings.length == 0) {
+      return "";
+    } else if (strings.length == 1) {
+      return strings[0];
+    } else {
+      StringBuilder sb = new StringBuilder();
+      sb.append(strings[0]);
+      for (int i = 1; i < strings.length; i++) {
+        sb.append(join).append(strings[i]);
+      }
+      return sb.toString();
+    }
+  }
+
+  public static long append(
+      String urlSet, String namespace, String[] tags, int allocSize, byte[] data) throws Exception {
     HttpResponse<InputStream> response =
         Unirest.post(urlSet)
             .queryString("allocSize", allocSize)
             .queryString("namespace", namespace)
+            .queryString("tags", tags == null ? "" : join(",", tags))
             .body(data)
             .asBinary();
     if (response.getStatus() != 200) {
@@ -157,9 +173,15 @@ public class Client {
     return out;
   }
 
-  public static void scan(String urlGetScan, String namespace, ScanConsumer consumer)
+  public static void scan(String urlGetScan, String namespace, String[] tags, ScanConsumer consumer)
       throws Exception {
-    URL url = new URL((urlGetScan + "?namespace=" + namespace));
+    URL url =
+        new URL(
+            (urlGetScan
+                + "?namespace="
+                + namespace
+                + "&tags="
+                + (tags == null ? "" : join(",", tags))));
 
     // XXX: Unirest reads the whole body, which makes the scan useless
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -225,19 +247,31 @@ public class Client {
   }
 
   public long append(byte[] data) throws Exception {
-    return append("", 0, data);
+    return append("", null, 0, data);
+  }
+
+  public long append(String[] tags, byte[] data) throws Exception {
+    return append("", tags, 0, data);
   }
 
   public long append(int allocSize, byte[] data) throws Exception {
-    return append("", allocSize, data);
+    return append("", null, allocSize, data);
+  }
+
+  public long append(String[] tags, int allocSize, byte[] data) throws Exception {
+    return append("", tags, allocSize, data);
   }
 
   public long append(String namespace, byte[] data) throws Exception {
-    return append(namespace, 0, data);
+    return append(namespace, null, 0, data);
   }
 
-  public long append(String namespace, int allocSize, byte[] data) throws Exception {
-    return append(this.urlAppend, namespace, allocSize, data);
+  public long append(String namespace, String[] tags, byte[] data) throws Exception {
+    return append(namespace, tags, 0, data);
+  }
+
+  public long append(String namespace, String[] tags, int allocSize, byte[] data) throws Exception {
+    return append(this.urlAppend, namespace, tags, allocSize, data);
   }
 
   public byte[] get(long offset) throws Exception {
@@ -265,11 +299,19 @@ public class Client {
   }
 
   public void scan(ScanConsumer consumer) throws Exception {
-    scan(this.urlScan, "", consumer);
+    scan(this.urlScan, "", null, consumer);
+  }
+
+  public void scan(String[] tags, ScanConsumer consumer) throws Exception {
+    scan(this.urlScan, "", tags, consumer);
+  }
+
+  public void scan(String namespace, String[] tags, ScanConsumer consumer) throws Exception {
+    scan(this.urlScan, namespace, tags, consumer);
   }
 
   public void scan(String namespace, ScanConsumer consumer) throws Exception {
-    scan(this.urlScan, namespace, consumer);
+    scan(this.urlScan, namespace, null, consumer);
   }
 
   public abstract static class ScanConsumer {
