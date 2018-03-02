@@ -4,7 +4,7 @@ var o
 
 data = new Buffer.alloc(1024 * 1024 * 10)
 r = new rochefort('http://localhost:8000')
-r.append({data: data}).then(offset => {
+r.append({data: data, tags: ['a','b','c']}).then(offset => {
     o = offset
     return r.get({offset: offset})
 }).then(v => {
