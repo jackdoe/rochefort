@@ -219,3 +219,4 @@ there is race between reading and modification from the client prespective
 * perl client
 * make c client that can be used from ruby/perl
 * javadoc for the java client
+* publish the java client on maven central
