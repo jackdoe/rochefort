@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,20 @@ import (
 type PostingsList struct {
 	descriptor *os.File
 	offset     uint64
+}
+
+func (this *PostingsList) readAtIndex(idx uint64) uint64 {
+	pos := idx * 8
+	if pos > this.offset-8 {
+		return math.MaxUint64
+	}
+
+	b := make([]byte, 8)
+	_, err := this.descriptor.ReadAt(b, int64(pos))
+	if err != nil {
+		return math.MaxUint64
+	}
+	return binary.LittleEndian.Uint64(b)
 }
 
 type StoreItem struct {
@@ -137,6 +152,61 @@ SCAN:
 		}
 
 		offset += uint64(allocSize) + uint64(headerLen)
+	}
+}
+
+func (this *StoreItem) scanOrIndexedTags(tags []string, cb func(uint32, uint64, []byte) bool) {
+	postings := []*PostingsList{}
+
+	for _, t := range tags {
+		postings = append(postings, this.CreatePostingsList(t))
+	}
+
+	positions := []uint64{}
+	for range tags {
+		positions = append(positions, 0)
+	}
+	minOffset := uint64(math.MaxUint64)
+	offsets := []uint64{}
+	for _, p := range postings {
+		o := p.readAtIndex(0)
+		offsets = append(offsets, o)
+		if o < minOffset {
+			minOffset = o
+		}
+	}
+
+	ntags := len(tags)
+
+SCAN:
+	for minOffset != math.MaxUint64 {
+		dataLen, _, _, err := readHeader(this.descriptor, minOffset)
+		if err != nil {
+			break SCAN
+		}
+
+		output := make([]byte, dataLen)
+		_, err = this.descriptor.ReadAt(output, int64(minOffset)+int64(headerLen))
+		if err != nil {
+			break SCAN
+		}
+
+		if !cb(dataLen, minOffset, output) {
+			break SCAN
+		}
+
+		newMinOffset := uint64(math.MaxUint64)
+		for i := 0; i < ntags; i++ {
+			if offsets[i] == minOffset {
+				positions[i]++
+				offsets[i] = postings[i].readAtIndex(positions[i])
+				if offsets[i] < newMinOffset {
+					newMinOffset = offsets[i]
+					log.Printf("new min offset: %d", newMinOffset)
+				}
+			}
+		}
+		minOffset = newMinOffset
 	}
 }
 
@@ -318,6 +388,10 @@ func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, uint64, [
 	this.find(storageIdentifier).scan(cb)
 }
 
+func (this *MultiStore) scanOrIndexedTags(storageIdentifier string, tags []string, cb func(uint32, uint64, []byte) bool) {
+	this.find(storageIdentifier).scanOrIndexedTags(tags, cb)
+}
+
 func makeTimestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
 }
@@ -330,10 +404,26 @@ func Log(handler http.Handler) http.Handler {
 	})
 }
 
+func getTags(tags string) []string {
+	if tags == "" {
+		return []string{}
+	}
+	splitted := strings.Split(tags, ",")
+	out := []string{}
+	for _, s := range splitted {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+
+}
+
 const namespaceKey = "namespace"
 const posKey = "pos"
 const allocSizeKey = "allocSize"
 const offsetKey = "offset"
+const tagsKey = "tags"
 
 func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
@@ -408,15 +498,9 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
 		} else {
-
-			tags := r.URL.Query().Get("tags")
-			if tags != "" {
-				splitted := strings.Split(tags, ",")
-				for _, s := range splitted {
-					if s != "" {
-						store.appendPostings(s, offset)
-					}
-				}
+			tags := getTags(r.URL.Query().Get(tagsKey))
+			for _, t := range tags {
+				store.appendPostings(t, offset)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(fmt.Sprintf("{\"offset\":%d}", offset)))
@@ -444,7 +528,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
-		multiStore.scan(r.URL.Query().Get(namespaceKey), func(dataLen uint32, offset uint64, data []byte) bool {
+		cb := func(dataLen uint32, offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
@@ -457,7 +541,14 @@ func main() {
 				return false
 			}
 			return true
-		})
+		}
+		tags := getTags(r.URL.Query().Get(tagsKey))
+		if len(tags) > 0 {
+			multiStore.scanOrIndexedTags(r.URL.Query().Get(namespaceKey), tags, cb)
+		} else {
+			multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
+		}
+
 	})
 
 	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
