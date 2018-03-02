@@ -9,6 +9,7 @@ const append = function append(args) {
         params: {
             namespace: args.namespace,
             allocSize: args.allocSize,
+            tags: (args.tags || []).join(","),
         },
         timeout: args.timeout || 1000,
         data: args.data

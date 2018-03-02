@@ -200,10 +200,11 @@ SCAN:
 			if offsets[i] == minOffset {
 				positions[i]++
 				offsets[i] = postings[i].readAtIndex(positions[i])
-				if offsets[i] < newMinOffset {
-					newMinOffset = offsets[i]
-				}
 			}
+			if offsets[i] < newMinOffset {
+				newMinOffset = offsets[i]
+			}
+
 		}
 		minOffset = newMinOffset
 	}
