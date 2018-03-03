@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"math"
 )
 
@@ -183,4 +184,66 @@ func (q *BoolAndQuery) Next() int64 {
 
 	// XXX: pick cheapest leading query
 	return q.nextAndedDoc(q.queries[0].Next())
+}
+
+/*
+
+{
+   and: [{"or": [{"tag":"b"}]}]
+}
+
+*/
+
+func fromJSON(store *StoreItem, input interface{}) (Query, error) {
+	mapped, ok := input.(map[string]interface{})
+	queries := []Query{}
+	if ok {
+
+		if v, ok := mapped["tag"]; ok {
+			value, ok := v.(string)
+			if !ok {
+				return nil, errors.New("[tag] must be a string")
+			}
+			queries = append(queries, store.CreatePostingsList(value).newTermQuery())
+		}
+		if v, ok := mapped["and"]; ok {
+			list, ok := v.([]interface{})
+			if ok {
+				and := NewBoolAndQuery([]Query{})
+				for _, subQuery := range list {
+					q, err := fromJSON(store, subQuery)
+					if err != nil {
+						return nil, err
+					}
+					and.AddSubQuery(q)
+				}
+				queries = append(queries, and)
+			} else {
+				return nil, errors.New("[or] takes array of subqueries")
+			}
+		}
+
+		if v, ok := mapped["or"]; ok {
+			list, ok := v.([]interface{})
+			if ok {
+				or := NewBoolOrQuery([]Query{})
+				for _, subQuery := range list {
+					q, err := fromJSON(store, subQuery)
+					if err != nil {
+						return nil, err
+					}
+					or.AddSubQuery(q)
+				}
+				queries = append(queries, or)
+			} else {
+				return nil, errors.New("[and] takes array of subqueries")
+			}
+		}
+	}
+
+	if len(queries) == 1 {
+		return queries[0], nil
+	}
+
+	return NewBoolAndQuery(queries), nil
 }

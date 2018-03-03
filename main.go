@@ -388,6 +388,10 @@ func (this *MultiStore) scanOrIndexedTags(storageIdentifier string, tags []strin
 	this.find(storageIdentifier).scanOrIndexedTags(tags, cb)
 }
 
+func (this *MultiStore) ExecuteQuery(storageIdentifier string, query Query, cb func(uint64, []byte) bool) {
+	this.find(storageIdentifier).ExecuteQuery(query, cb)
+}
+
 func makeTimestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
 }
@@ -567,6 +571,50 @@ NAMESPACE:
 			multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
 		}
 
+	})
+
+	http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+
+		defer r.Body.Close()
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		var decoded map[string]interface{}
+		err = json.Unmarshal(body, &decoded)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		stored := multiStore.find(r.URL.Query().Get(namespaceKey))
+		query, err := fromJSON(stored, decoded)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		header := make([]byte, 12)
+		cb := func(offset uint64, data []byte) bool {
+			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
+			binary.LittleEndian.PutUint64(header[4:], offset)
+
+			_, err := w.Write(header)
+			if err != nil {
+				return false
+			}
+			_, err = w.Write(data)
+			if err != nil {
+				return false
+			}
+			return true
+		}
+		stored.ExecuteQuery(query, cb)
 	})
 
 	http.HandleFunc("/stat", func(w http.ResponseWriter, r *http.Request) {
