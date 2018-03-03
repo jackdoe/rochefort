@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -35,18 +34,17 @@ type PostingsList struct {
 	offset     uint64
 }
 
-func (this *PostingsList) readAtIndex(idx uint64) uint64 {
-	pos := idx * 8
-	if pos > this.offset-8 {
-		return math.MaxUint64
+func (this *PostingsList) newTermQuery() *Term {
+	postings := make([]byte, this.offset)
+	n, err := this.descriptor.ReadAt(postings, 0)
+	if n != len(postings) && err != nil {
+		postings = []byte{}
 	}
-
-	b := make([]byte, 8)
-	_, err := this.descriptor.ReadAt(b, int64(pos))
-	if err != nil {
-		return math.MaxUint64
+	return &Term{
+		cursor:    -1,
+		postings:  postings,
+		QueryBase: QueryBase{NOT_READY},
 	}
-	return binary.LittleEndian.Uint64(b)
 }
 
 type StoreItem struct {
@@ -109,11 +107,14 @@ func NewStorage(root string) *StoreItem {
 }
 
 func (this *StoreItem) CreatePostingsList(name string) *PostingsList {
+	this.RLock()
+
 	name = sanitize(name)
 	if p, ok := this.index[name]; ok {
+		this.RUnlock()
 		return p
 	}
-
+	this.RUnlock()
 	this.Lock()
 	defer this.Unlock()
 
@@ -146,7 +147,7 @@ func (this *StoreItem) stats() *Stats {
 	return out
 }
 
-func (this *StoreItem) scan(cb func(uint32, uint64, []byte) bool) {
+func (this *StoreItem) scan(cb func(uint64, []byte) bool) {
 SCAN:
 	for offset := uint64(0); offset < this.offset; {
 		// this is lockless, which means we could read a header,
@@ -162,7 +163,7 @@ SCAN:
 			break SCAN
 		}
 
-		if !cb(dataLen, offset, output) {
+		if !cb(offset, output) {
 			break SCAN
 		}
 
@@ -170,59 +171,35 @@ SCAN:
 	}
 }
 
-func (this *StoreItem) scanOrIndexedTags(tags []string, cb func(uint32, uint64, []byte) bool) {
-	postings := []*PostingsList{}
-
-	for _, t := range tags {
-		postings = append(postings, this.CreatePostingsList(t))
-	}
-
-	positions := []uint64{}
-	for range tags {
-		positions = append(positions, 0)
-	}
-	minOffset := uint64(math.MaxUint64)
-	offsets := []uint64{}
-	for _, p := range postings {
-		o := p.readAtIndex(0)
-		offsets = append(offsets, o)
-		if o < minOffset {
-			minOffset = o
-		}
-	}
-
-	ntags := len(tags)
-
-SCAN:
-	for minOffset != math.MaxUint64 {
-		dataLen, _, _, err := readHeader(this.descriptor, minOffset)
+func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
+	for query.Next() != NO_MORE {
+		offset := uint64(query.GetDocId())
+		dataLen, _, _, err := readHeader(this.descriptor, offset)
 		if err != nil {
-			break SCAN
+			break
 		}
 
 		output := make([]byte, dataLen)
-		_, err = this.descriptor.ReadAt(output, int64(minOffset)+int64(headerLen))
+		_, err = this.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
 		if err != nil {
-			break SCAN
+			break
 		}
 
-		if !cb(dataLen, minOffset, output) {
-			break SCAN
+		if !cb(offset, output) {
+			break
 		}
-
-		newMinOffset := uint64(math.MaxUint64)
-		for i := 0; i < ntags; i++ {
-			if offsets[i] == minOffset {
-				positions[i]++
-				offsets[i] = postings[i].readAtIndex(positions[i])
-			}
-			if offsets[i] < newMinOffset {
-				newMinOffset = offsets[i]
-			}
-
-		}
-		minOffset = newMinOffset
 	}
+}
+
+func (this *StoreItem) scanOrIndexedTags(tags []string, cb func(uint64, []byte) bool) {
+	terms := []Query{}
+	for _, t := range tags {
+		terms = append(terms, this.CreatePostingsList(t).newTermQuery())
+	}
+	var query Query
+	query = NewBoolOrQuery(terms)
+
+	this.ExecuteQuery(query, cb)
 }
 
 const headerLen = 4 + 8 + 4 + 4
@@ -403,11 +380,11 @@ func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, [
 	return this.find(storageIdentifier).read(offset)
 }
 
-func (this *MultiStore) scan(storageIdentifier string, cb func(uint32, uint64, []byte) bool) {
+func (this *MultiStore) scan(storageIdentifier string, cb func(uint64, []byte) bool) {
 	this.find(storageIdentifier).scan(cb)
 }
 
-func (this *MultiStore) scanOrIndexedTags(storageIdentifier string, tags []string, cb func(uint32, uint64, []byte) bool) {
+func (this *MultiStore) scanOrIndexedTags(storageIdentifier string, tags []string, cb func(uint64, []byte) bool) {
 	this.find(storageIdentifier).scanOrIndexedTags(tags, cb)
 }
 
@@ -569,7 +546,7 @@ NAMESPACE:
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
-		cb := func(dataLen uint32, offset uint64, data []byte) bool {
+		cb := func(offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
