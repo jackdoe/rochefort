@@ -3,6 +3,7 @@ package nl.prymr.rochefort;
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
+import org.json.JSONObject;
 
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -11,13 +12,15 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static nl.prymr.rochefort.Util.convertStreamToString;
 import static nl.prymr.rochefort.Util.readFully;
 
 public class Client {
-  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify;
+  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify, urlStats;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -41,6 +44,7 @@ public class Client {
     this.urlAppend = prefix + "append";
     this.urlModify = prefix + "modify";
     this.urlScan = prefix + "scan";
+    this.urlStats = prefix + "stat";
   }
 
   public static String join(String join, String... strings) {
@@ -127,6 +131,33 @@ public class Client {
     }
 
     return readFully(response.getRawBody(), -1, true);
+  }
+
+  public static Stats stats(String urlStats, String namespace) throws Exception {
+    HttpResponse<JsonNode> response =
+        Unirest.get(urlStats).queryString("namespace", namespace).asJson();
+    if (response.getStatus() != 200) {
+      throw new Exception(
+          "status code "
+              + response.getStatus()
+              + " url: "
+              + urlStats
+              + " namespace: "
+              + namespace
+              + " body: "
+              + convertStreamToString(response.getRawBody()));
+    }
+
+    JSONObject obj = response.getBody().getObject();
+    Stats s = new Stats();
+    s.Offset = obj.getLong("Offset");
+    s.File = obj.getString("File");
+
+    JSONObject tags = obj.getJSONObject("Tags");
+    for (String tag : tags.keySet()) {
+      s.Tags.put(tag, tags.getLong(tag));
+    }
+    return s;
   }
 
   public static List<byte[]> getMulti(
@@ -312,6 +343,16 @@ public class Client {
 
   public void scan(String namespace, ScanConsumer consumer) throws Exception {
     scan(this.urlScan, namespace, null, consumer);
+  }
+
+  public Stats stats(String namespace) throws Exception {
+    return stats(this.urlStats, namespace);
+  }
+
+  public static class Stats {
+    public String File;
+    public long Offset;
+    public Map<String, Long> Tags = new HashMap<>();
   }
 
   public abstract static class ScanConsumer {

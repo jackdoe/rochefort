@@ -46,6 +46,7 @@ public class ClientTest extends TestCase {
   public void testSearch() throws Exception {
     client.append("search", new String[] {"jaz"}, "abc".getBytes());
     client.append("search", new String[] {"jaz"}, "zzz".getBytes());
+    client.append("search", new String[] {"jaz"}, "zzz2".getBytes());
 
     final List<String> matching = new ArrayList<>();
     client.scan(
@@ -59,6 +60,9 @@ public class ClientTest extends TestCase {
         });
     assertEquals(matching.get(0), "abc");
     assertEquals(matching.get(1), "zzz");
+
+    Client.Stats s = client.stats("search");
+    assertEquals(Long.valueOf(3), s.Tags.get("jaz"));
   }
 
   public void testModify() throws Exception {
