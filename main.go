@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,6 +23,12 @@ import (
 	"syscall"
 	"time"
 )
+
+type Stats struct {
+	Tags   map[string]uint64
+	Offset uint64
+	File   string
+}
 
 type PostingsList struct {
 	descriptor *os.File
@@ -48,7 +55,7 @@ type StoreItem struct {
 	descriptor *os.File
 	index      map[string]*PostingsList
 	offset     uint64
-	sync.Mutex
+	sync.RWMutex
 }
 
 var nonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -76,15 +83,7 @@ func NewStorage(root string) *StoreItem {
 	os.MkdirAll(root, 0700)
 
 	filePath := path.Join(root, "append.raw")
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		panic(err)
-	}
-	offset, err := f.Seek(0, 2)
-
-	if err != nil {
-		panic(err)
-	}
+	f, offset := openAtEnd(filePath)
 
 	si := &StoreItem{
 		offset:     uint64(offset),
@@ -129,6 +128,22 @@ func (this *StoreItem) CreatePostingsList(name string) *PostingsList {
 	}
 	this.index[name] = p
 	return p
+}
+
+func (this *StoreItem) stats() *Stats {
+	out := &Stats{
+		Tags:   make(map[string]uint64),
+		Offset: this.offset,
+		File:   this.path,
+	}
+
+	this.RLock()
+	defer this.RUnlock()
+	for name, index := range this.index {
+		out.Tags[name] = index.offset / 8
+	}
+
+	return out
 }
 
 func (this *StoreItem) scan(cb func(uint32, uint64, []byte) bool) {
@@ -376,6 +391,10 @@ func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos int3
 	return this.find(storageIdentifier).modify(offset, pos, data)
 }
 
+func (this *MultiStore) stats(storageIdentifier string) *Stats {
+	return this.find(storageIdentifier).stats()
+}
+
 func (this *MultiStore) append(storageIdentifier string, allocSize uint32, data io.Reader) (uint64, error) {
 	return this.find(storageIdentifier).append(allocSize, data)
 }
@@ -434,6 +453,28 @@ func main() {
 	multiStore := &MultiStore{
 		stores: make(map[string]*StoreItem),
 		root:   *proot,
+	}
+
+	os.MkdirAll(*proot, 0700)
+	namespaces, err := ioutil.ReadDir(*proot)
+	if err != nil {
+		panic(err)
+	}
+	// open all files in the namespace
+NAMESPACE:
+	for _, namespace := range namespaces {
+		if namespace.IsDir() {
+			files, err := ioutil.ReadDir(path.Join(*proot, namespace.Name()))
+			if err == nil {
+				for _, file := range files {
+					if strings.HasSuffix(file.Name(), ".raw") {
+						multiStore.find(namespace.Name())
+						continue NAMESPACE
+					}
+				}
+			}
+
+		}
 	}
 
 	sigs := make(chan os.Signal, 1)
@@ -549,6 +590,19 @@ func main() {
 			multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
 		}
 
+	})
+
+	http.HandleFunc("/stat", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		stats := multiStore.stats(r.URL.Query().Get(namespaceKey))
+		b, err := json.Marshal(stats)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
+		}
 	})
 
 	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
