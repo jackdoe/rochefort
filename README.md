@@ -6,7 +6,7 @@
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
 * supports: **append, modify, get, multiget, close, query**
-* clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
+* clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), [javascript (incomplete)](https://github.com/jackdoe/rochefort/tree/master/clients/js), curl
 
 ---
 
@@ -69,7 +69,7 @@ as you can see the offset for the second blob is 1024 bytes + header(20 bytes) a
 
 ### inverted index
 passing &tags=a,b,c to /append will create postings lists in the namespace
-a.postings, b.postings and c.postings, later you can scan only specific tags with /scan
+a.postings, b.postings and c.postings, later you can query only specific tags with /query
 
 
 ## MODIFY
@@ -177,10 +177,38 @@ $ curl http://localhost:8000/scan?namespace=someStoragePrefix > dump.txt
 the format is
 [len 4 bytes(little endian)][offset 8 bytes little endian)]data...[len][offset]data
 
-### inverted index
-pass tags=a,b,c and you can search for blobs indexed in a OR b OR c
+## SEARCH
+
+you can search all tagged blobs, the dsl is fairly simple, post/get json blob to  /query
+
+* basic tag query
+
+```
+{"tag":"xyz"}
+```
+
+* basic OR query
+
+```
+{"or": [... subqueries ...]}
+```
 
 
+* basic AND query
+
+```
+{"and": [... subqueries ...]}
+```
+
+
+example:
+
+```
+curl -XGET -d '{"and":[{"tag":"c"},{"or":[{"tag":"b"},{"tag":"c"}]}]}' 'http://localhost:8000/query'
+```
+
+it spits out the output in same format as /scan, so the result of the query can be very big
+but it is streamed
 
 
 ## LICENSE
