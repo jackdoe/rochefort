@@ -2,7 +2,7 @@ require 'rest-client'
 require 'uri'
 require 'json'
 
-# client for https://github.com/jackdoe/rochefort - disk speed append + offset service (poor man's kafka), 
+# client for https://github.com/jackdoe/rochefort - disk speed append + offset service (poor man's kafka),
 # example usage
 #  r = new Rochefort("http://localhost:8001")
 #  offset = r.append(namespace: "example-namespace", data:"example-data")
@@ -14,6 +14,7 @@ class Rochefort
     @urlModify = URI::join(url,'modify').to_s
     @urlGet = URI::join(url,'get').to_s
     @urlScan = URI::join(url,'scan').to_s
+    @urlQuery = URI::join(url,'query').to_s
     @urlGetMulti = URI::join(url,'getMulti').to_s
   end
 
@@ -60,7 +61,7 @@ class Rochefort
     return out["success"]
   end
 
-  
+
   # get data from rochefort
   #  r = Rochefort.new(url)
   #  r.get(
@@ -103,14 +104,8 @@ class Rochefort
     return out
   end
 
-  # scans a namespace, reading from a stream, so the namespace can be very big
-  # also accepts array of tags to search for
-  #  r = Rochefort.new(url)
-  #  r.scan(namespace: ns) do |len, offset, value|
-  #    puts value
-  #  end
-  # @return calls the block for each item
-  def scan(opts,&input_block)
+
+  def scanParser(input_block)
     block = proc do |response|
       buffer = ""
       header_len = 12
@@ -124,7 +119,6 @@ class Rochefort
       response.read_body do |chunk|
         buffer << chunk
         while buffer.length >= need
-
           if waiting_for_header
             h = buffer.unpack('l<q<')
             len = h[0]
@@ -135,7 +129,7 @@ class Rochefort
           end
 
           if buffer.length >= need
-            input_block.call(len, rochefort_offset, buffer[0, len])
+            input_block.call(rochefort_offset, buffer[0, len])
             buffer = buffer[len, buffer.length - len]
             need = header_len
             waiting_for_header = true
@@ -143,12 +137,41 @@ class Rochefort
         end
       end
     end
+    return block
+  end
 
-    tags = opts[:tags] || []
+
+  # scans a namespace, reading from a stream, so the namespace can be very big
+  #  r = Rochefort.new(url)
+  #  r.scan(namespace: ns) do |offset, value|
+  #    puts value
+  #  end
+  # @return calls the block for each item
+  def scan(opts,&input_block)
     RestClient::Request.execute(method: :get,
-                                url: "#{@urlScan}?namespace=#{opts[:namespace]}&tags=#{tags.join(",")}",
+                                url: "#{@urlScan}?namespace=#{opts[:namespace]}",
                                 read_timeout: opts[:read_timeout] || 1,
                                 open_timeout: opts[:open_timeout] || 1,
-                                block_response: block)
+                                block_response: scanParser(input_block))
+  end
+
+  # searches a namespace, for the tagged /append blobs, reading from a stream, so the namespace can be very big
+  #  r = Rochefort.new(url)
+  #  r.search(query: {tag: 'a'}, namespace: ns) do |offset, value|
+  #    puts value
+  #  end
+  #
+  # the dsl is fairly simple: (A OR B OR (C AND D)
+  #  {
+  #    or: [ { tag: 'a' }, { tag: 'a' }, { and: [ {tag: 'c'}, {tag:'d'} ] } ]
+  #  }
+  # @return calls the block for each item
+  def search(opts,&input_block)
+    RestClient::Request.execute(method: :post,
+                                payload: JSON.generate(opts[:query]),
+                                url: "#{@urlQuery}?namespace=#{opts[:namespace]}",
+                                read_timeout: opts[:read_timeout] || 1,
+                                open_timeout: opts[:open_timeout] || 1,
+                                block_response: scanParser(input_block))
   end
 end

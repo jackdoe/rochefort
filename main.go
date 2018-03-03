@@ -191,17 +191,6 @@ func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
 	}
 }
 
-func (this *StoreItem) scanOrIndexedTags(tags []string, cb func(uint64, []byte) bool) {
-	terms := []Query{}
-	for _, t := range tags {
-		terms = append(terms, this.CreatePostingsList(t).newTermQuery())
-	}
-	var query Query
-	query = NewBoolOrQuery(terms)
-
-	this.ExecuteQuery(query, cb)
-}
-
 const headerLen = 4 + 8 + 4 + 4
 
 func readHeader(file *os.File, offset uint64) (uint32, uint64, uint32, error) {
@@ -384,10 +373,6 @@ func (this *MultiStore) scan(storageIdentifier string, cb func(uint64, []byte) b
 	this.find(storageIdentifier).scan(cb)
 }
 
-func (this *MultiStore) scanOrIndexedTags(storageIdentifier string, tags []string, cb func(uint64, []byte) bool) {
-	this.find(storageIdentifier).scanOrIndexedTags(tags, cb)
-}
-
 func (this *MultiStore) ExecuteQuery(storageIdentifier string, query Query, cb func(uint64, []byte) bool) {
 	this.find(storageIdentifier).ExecuteQuery(query, cb)
 }
@@ -564,13 +549,7 @@ NAMESPACE:
 			}
 			return true
 		}
-		tags := getTags(r.URL.Query().Get(tagsKey))
-		if len(tags) > 0 {
-			multiStore.scanOrIndexedTags(r.URL.Query().Get(namespaceKey), tags, cb)
-		} else {
-			multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
-		}
-
+		multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
 	})
 
 	http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {

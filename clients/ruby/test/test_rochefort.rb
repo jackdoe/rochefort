@@ -32,20 +32,27 @@ class RochefortTest < Minitest::Unit::TestCase
       aa = []
       bb = []
       ab = []
-      r.scan(namespace: ns, tags: ['a']) do |len, offset, v|
+
+      r.search(query: {tag: 'a'}, namespace: ns) do |offset, v|
         aa << v
       end
 
-      r.scan(namespace: ns, tags: ['b']) do |len, offset, v|
+      r.search(query: {tag: 'b'}, namespace: ns) do |offset, v|
         bb << v
       end
 
-      r.scan(namespace: ns, tags: ['a', 'b']) do |len, offset, v|
+      r.search(query: {or: [{tag: 'a'}, {tag: 'b'}]}, namespace: ns) do |offset, v|
         ab << v
       end
 
+      aabb = []
+      r.search(query: {and: [{tag: 'a'}, {tag: 'b'}]}, namespace: ns) do |offset, v|
+        aabb << v
+      end
 
+      
       assert_equal(aa, ['aaa','aaa2','aaa3','bbb2','bbb3'])
+      assert_equal(aabb, ['aaa2','aaa3','bbb2','bbb3'])
       assert_equal(bb, ['aaa2','aaa3','bbb','bbb2','bbb3'])
       assert_equal(ab, ['aaa','aaa2','aaa3','bbb','bbb2','bbb3'])
     end
@@ -58,7 +65,7 @@ class RochefortTest < Minitest::Unit::TestCase
     if url
       [nil,"atext","exam,ple"].each do |ns|
         everything_so_far = {}
-        r.scan(namespace: ns) do |len, offset, data|
+        r.scan(namespace: ns) do |offset, data|
           everything_so_far[offset] = data
         end
 
@@ -103,7 +110,7 @@ class RochefortTest < Minitest::Unit::TestCase
             everything_so_far[offset] = fetched
 
             matching = 0
-            r.scan(namespace: ns, open_timeout: 10) do |len, offset, v|
+            r.scan(namespace: ns, open_timeout: 10) do |offset, v|
               if !everything_so_far[offset]
                 raise "expected ${offset}"
               end
