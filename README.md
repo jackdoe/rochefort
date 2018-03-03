@@ -12,13 +12,13 @@
 
 ## run in docker
 
-run with docker: jackdoe/rochefort:1.3
+run with docker: jackdoe/rochefort:1.4
 
 ```
 docker run -e BIND=":8000" \
            -e ROOT="/tmp/rochefort" \
            -p 8000:8000 \
-           jackdoe/rochefort:1.3
+           jackdoe/rochefort:1.4
 ```
 
 
@@ -30,7 +30,7 @@ docker run -e BIND=":8000" \
 you can migrate your data by doing:
 
 ```
-oldServer.scan(namespace: ns) do |len, offset, v|
+oldServer.scan(namespace: ns) do |offset, v|
   newServer.append(namespace:ns, data: v)
 end
 ```
