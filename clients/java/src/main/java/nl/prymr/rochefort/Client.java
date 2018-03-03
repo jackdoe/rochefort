@@ -5,10 +5,7 @@ import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import org.json.JSONObject;
 
-import java.io.DataInputStream;
-import java.io.EOFException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -20,7 +17,7 @@ import static nl.prymr.rochefort.Util.convertStreamToString;
 import static nl.prymr.rochefort.Util.readFully;
 
 public class Client {
-  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify, urlStats;
+  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify, urlStats, urlQuery;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -44,6 +41,7 @@ public class Client {
     this.urlAppend = prefix + "append";
     this.urlModify = prefix + "modify";
     this.urlScan = prefix + "scan";
+    this.urlQuery = prefix + "query";
     this.urlStats = prefix + "stat";
   }
 
@@ -204,29 +202,35 @@ public class Client {
     return out;
   }
 
-  public static void scan(String urlGetScan, String namespace, String[] tags, ScanConsumer consumer)
+  public static void scan(String urlQuery, String namespace, Query query, ScanConsumer consumer)
       throws Exception {
-    URL url =
-        new URL(
-            (urlGetScan
-                + "?namespace="
-                + namespace
-                + "&tags="
-                + (tags == null ? "" : join(",", tags))));
+    URL url = new URL((urlQuery + "?namespace=" + namespace));
 
     // XXX: Unirest reads the whole body, which makes the scan useless
     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-    connection.setRequestMethod("GET");
-    connection.setDoOutput(false);
-    connection.setConnectTimeout(consumer.getConnectTimeout());
+    connection.setRequestMethod("POST");
     connection.setReadTimeout(consumer.getReadTimeout());
+    connection.setConnectTimeout(consumer.getConnectTimeout());
     connection.setRequestProperty("Connection", "close");
-
     InputStream inputStream = null;
     InputStreamReader reader = null;
 
     try {
+      if (query != null) {
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type", "application/json");
+        JSONObject json = new JSONObject(query);
+        OutputStream os = connection.getOutputStream();
+        OutputStreamWriter writer = new OutputStreamWriter(os);
+        json.write(writer);
+        writer.flush();
+        writer.close();
+        os.close();
+      } else {
+        connection.setDoOutput(true);
+      }
+
       inputStream = connection.getInputStream();
       byte[] buffer = new byte[65535];
       byte[] header = new byte[12];
@@ -253,7 +257,7 @@ public class Client {
           "status code "
               + code
               + " url: "
-              + urlGetScan
+              + urlQuery
               + " namespace: "
               + namespace
               + " exception: "
@@ -333,16 +337,16 @@ public class Client {
     scan(this.urlScan, "", null, consumer);
   }
 
-  public void scan(String[] tags, ScanConsumer consumer) throws Exception {
-    scan(this.urlScan, "", tags, consumer);
-  }
-
-  public void scan(String namespace, String[] tags, ScanConsumer consumer) throws Exception {
-    scan(this.urlScan, namespace, tags, consumer);
-  }
-
   public void scan(String namespace, ScanConsumer consumer) throws Exception {
     scan(this.urlScan, namespace, null, consumer);
+  }
+
+  public void search(Query query, ScanConsumer consumer) throws Exception {
+    scan(this.urlQuery, "", query, consumer);
+  }
+
+  public void search(String namespace, Query query, ScanConsumer consumer) throws Exception {
+    scan(this.urlQuery, namespace, query, consumer);
   }
 
   public Stats stats(String namespace) throws Exception {
@@ -365,5 +369,43 @@ public class Client {
     }
 
     public abstract void accept(byte[] buffer, int length, long rochefortOffset) throws Exception;
+  }
+
+  public static final class Query {
+    public List<Query> and;
+    public List<Query> or;
+    public String tag;
+
+    public Query(String t) {
+      this.tag = t;
+    }
+
+    public Query() {}
+
+    public String getTag() {
+      return tag;
+    }
+
+    public List<Query> getAnd() {
+      return and;
+    }
+
+    public List<Query> getOr() {
+      return or;
+    }
+
+    public Query and(Query... qq) {
+      if (this.and == null) this.and = new ArrayList<>();
+
+      for (Query q : qq) this.and.add(q);
+      return this;
+    }
+
+    public Query or(Query... qq) {
+      if (this.or == null) this.or = new ArrayList<>();
+
+      for (Query q : qq) this.or.add(q);
+      return this;
+    }
   }
 }

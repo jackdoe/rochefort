@@ -592,6 +592,7 @@ NAMESPACE:
 			return
 		}
 		stored := multiStore.find(r.URL.Query().Get(namespaceKey))
+
 		query, err := fromJSON(stored, decoded)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

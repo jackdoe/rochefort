@@ -5,7 +5,7 @@
 
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
-* supports: **append, modify, get, multiget, close**
+* supports: **append, modify, get, multiget, close, query**
 * clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java), [javascript](https://github.com/jackdoe/rochefort/tree/master/clients/js), [ruby](https://github.com/jackdoe/rochefort/tree/master/clients/ruby), curl
 
 ---
@@ -179,6 +179,8 @@ the format is
 
 ### inverted index
 pass tags=a,b,c and you can search for blobs indexed in a OR b OR c
+
+
 
 
 ## LICENSE

@@ -199,14 +199,14 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 	queries := []Query{}
 	if ok {
 
-		if v, ok := mapped["tag"]; ok {
+		if v, ok := mapped["tag"]; ok && v != nil {
 			value, ok := v.(string)
 			if !ok {
 				return nil, errors.New("[tag] must be a string")
 			}
 			queries = append(queries, store.CreatePostingsList(value).newTermQuery())
 		}
-		if v, ok := mapped["and"]; ok {
+		if v, ok := mapped["and"]; ok && v != nil {
 			list, ok := v.([]interface{})
 			if ok {
 				and := NewBoolAndQuery([]Query{})
@@ -223,7 +223,7 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 			}
 		}
 
-		if v, ok := mapped["or"]; ok {
+		if v, ok := mapped["or"]; ok && v != nil {
 			list, ok := v.([]interface{})
 			if ok {
 				or := NewBoolOrQuery([]Query{})

@@ -49,15 +49,20 @@ public class ClientTest extends TestCase {
     client.append("search", new String[] {"jaz"}, "zzz2".getBytes());
 
     final List<String> matching = new ArrayList<>();
-    client.scan(
+    client.search(
         "search",
-        new String[] {"jaz"},
+        new Client.Query()
+            .or(
+                new Client.Query("jaz"),
+                new Client.Query("jaz"),
+                new Client.Query().and(new Client.Query("jaz"))),
         new Client.ScanConsumer() {
           @Override
           public void accept(byte[] buffer, int length, long rochefortOffset) throws Exception {
             matching.add(new String(Arrays.copyOfRange(buffer, 0, length)));
           }
         });
+
     assertEquals(matching.get(0), "abc");
     assertEquals(matching.get(1), "zzz");
 
