@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"errors"
 	"math"
 )
@@ -27,13 +26,9 @@ func (q *QueryBase) GetDocId() int64 {
 
 type Term struct {
 	cursor   int64
-	postings []byte
+	postings []uint64
 	term     string
 	QueryBase
-}
-
-func (t *Term) getAt(idx int64) uint64 {
-	return binary.LittleEndian.Uint64(t.postings[(idx * 8):])
 }
 
 func (t *Term) advance(target int64) int64 {
@@ -44,12 +39,13 @@ func (t *Term) advance(target int64) int64 {
 	if t.cursor < 0 {
 		t.cursor = 0
 	}
+
 	start := t.cursor
-	end := int64(len(t.postings) / 8)
+	end := int64(len(t.postings))
 
 	for start < end {
 		mid := start + ((end - start) / 2)
-		current := int64(t.getAt(mid))
+		current := int64(t.postings[mid])
 		if current == target {
 			t.cursor = mid
 			t.docId = target
@@ -68,10 +64,10 @@ func (t *Term) advance(target int64) int64 {
 
 func (t *Term) move(to int64) int64 {
 	t.cursor = to
-	if t.cursor >= int64(len(t.postings)/8) {
+	if t.cursor >= int64(len(t.postings)) {
 		t.docId = NO_MORE
 	} else {
-		t.docId = int64(t.getAt(t.cursor))
+		t.docId = int64(t.postings[t.cursor])
 	}
 	return t.docId
 }
@@ -103,7 +99,9 @@ func NewBoolOrQuery(queries []Query) *BoolOrQuery {
 
 func (q *BoolOrQuery) advance(target int64) int64 {
 	new_doc := NO_MORE
-	for _, sub_query := range q.queries {
+	n := len(q.queries)
+	for i := 0; i < n; i++ {
+		sub_query := q.queries[i]
 		cur_doc := sub_query.GetDocId()
 		if cur_doc < target {
 			cur_doc = sub_query.advance(target)

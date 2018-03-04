@@ -40,9 +40,15 @@ func (this *PostingsList) newTermQuery() *Term {
 	if n != len(postings) && err != nil {
 		postings = []byte{}
 	}
+	longed := make([]uint64, len(postings)/8)
+	j := 0
+	for i := 0; i < len(postings); i += 8 {
+		longed[j] = binary.LittleEndian.Uint64(postings[i:])
+		j++
+	}
 	return &Term{
 		cursor:    -1,
-		postings:  postings,
+		postings:  longed,
 		QueryBase: QueryBase{NOT_READY},
 	}
 }
@@ -649,6 +655,7 @@ NAMESPACE:
 			}
 		}
 	})
+
 	if !*pquiet {
 		log.Printf("starting http server on %s", *pbind)
 		err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
