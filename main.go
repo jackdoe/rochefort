@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -40,17 +41,13 @@ func (this *PostingsList) newTermQuery() *Term {
 	if n != len(postings) && err != nil {
 		postings = []byte{}
 	}
-	longed := make([]uint64, len(postings)/8)
+	longed := make([]int64, len(postings)/8)
 	j := 0
 	for i := 0; i < len(postings); i += 8 {
-		longed[j] = binary.LittleEndian.Uint64(postings[i:])
+		longed[j] = int64(binary.LittleEndian.Uint64(postings[i:]))
 		j++
 	}
-	return &Term{
-		cursor:    -1,
-		postings:  longed,
-		QueryBase: QueryBase{NOT_READY},
-	}
+	return NewTerm(longed)
 }
 
 type StoreItem struct {
@@ -541,15 +538,16 @@ NAMESPACE:
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
+		buffered := bufio.NewWriter(w)
 		cb := func(offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
-			_, err := w.Write(header)
+			_, err := buffered.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = w.Write(data)
+			_, err = buffered.Write(data)
 			if err != nil {
 				return false
 			}
@@ -586,15 +584,16 @@ NAMESPACE:
 		}
 
 		header := make([]byte, 12)
+		buffered := bufio.NewWriter(w)
 		cb := func(offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
-			_, err := w.Write(header)
+			_, err := buffered.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = w.Write(data)
+			_, err = buffered.Write(data)
 			if err != nil {
 				return false
 			}

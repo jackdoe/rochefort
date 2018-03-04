@@ -25,12 +25,19 @@ func (q *QueryBase) GetDocId() int64 {
 }
 
 type Term struct {
-	cursor   int64
-	postings []uint64
-	term     string
+	cursor   int
+	postings []int64
 	QueryBase
 }
 
+func NewTerm(postings []int64) *Term {
+	return &Term{
+		cursor:    -1,
+		postings:  postings,
+		QueryBase: QueryBase{NOT_READY},
+	}
+
+}
 func (t *Term) advance(target int64) int64 {
 	if t.docId == NO_MORE || t.docId == target || target == NO_MORE {
 		t.docId = target
@@ -41,15 +48,15 @@ func (t *Term) advance(target int64) int64 {
 	}
 
 	start := t.cursor
-	end := int64(len(t.postings))
+	end := len(t.postings)
 
 	for start < end {
 		mid := start + ((end - start) / 2)
-		current := int64(t.postings[mid])
+		current := t.postings[mid]
 		if current == target {
 			t.cursor = mid
 			t.docId = target
-			return t.GetDocId()
+			return target
 		}
 
 		if current < target {
@@ -58,23 +65,23 @@ func (t *Term) advance(target int64) int64 {
 			end = mid
 		}
 	}
-
-	return t.move(start)
-}
-
-func (t *Term) move(to int64) int64 {
-	t.cursor = to
-	if t.cursor >= int64(len(t.postings)) {
+	if start >= len(t.postings) {
 		t.docId = NO_MORE
-	} else {
-		t.docId = int64(t.postings[t.cursor])
+		return NO_MORE
 	}
+	t.cursor = start
+	t.docId = t.postings[start]
 	return t.docId
 }
 
 func (t *Term) Next() int64 {
 	t.cursor++
-	return t.move(t.cursor)
+	if t.cursor >= len(t.postings) {
+		t.docId = NO_MORE
+	} else {
+		t.docId = t.postings[t.cursor]
+	}
+	return t.docId
 }
 
 type BoolQueryBase struct {
@@ -90,7 +97,7 @@ type BoolOrQuery struct {
 	QueryBase
 }
 
-func NewBoolOrQuery(queries []Query) *BoolOrQuery {
+func NewBoolOrQuery(queries ...Query) *BoolOrQuery {
 	return &BoolOrQuery{
 		BoolQueryBase: BoolQueryBase{queries},
 		QueryBase:     QueryBase{NOT_READY},
@@ -138,7 +145,7 @@ type BoolAndQuery struct {
 	QueryBase
 }
 
-func NewBoolAndQuery(queries []Query) *BoolAndQuery {
+func NewBoolAndQuery(queries ...Query) *BoolAndQuery {
 	return &BoolAndQuery{
 		BoolQueryBase: BoolQueryBase{queries},
 		QueryBase:     QueryBase{NOT_READY},
@@ -207,7 +214,7 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 		if v, ok := mapped["and"]; ok && v != nil {
 			list, ok := v.([]interface{})
 			if ok {
-				and := NewBoolAndQuery([]Query{})
+				and := NewBoolAndQuery([]Query{}...)
 				for _, subQuery := range list {
 					q, err := fromJSON(store, subQuery)
 					if err != nil {
@@ -224,7 +231,7 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 		if v, ok := mapped["or"]; ok && v != nil {
 			list, ok := v.([]interface{})
 			if ok {
-				or := NewBoolOrQuery([]Query{})
+				or := NewBoolOrQuery([]Query{}...)
 				for _, subQuery := range list {
 					q, err := fromJSON(store, subQuery)
 					if err != nil {
@@ -243,5 +250,5 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 		return queries[0], nil
 	}
 
-	return NewBoolAndQuery(queries), nil
+	return NewBoolAndQuery(queries...), nil
 }
