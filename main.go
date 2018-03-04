@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -41,6 +40,7 @@ func (this *PostingsList) newTermQuery() *Term {
 	if n != len(postings) && err != nil {
 		postings = []byte{}
 	}
+
 	longed := make([]int64, len(postings)/8)
 	j := 0
 	for i := 0; i < len(postings); i += 8 {
@@ -538,16 +538,15 @@ NAMESPACE:
 		w.Header().Set("Content-Type", "application/octet-stream")
 
 		header := make([]byte, 12)
-		buffered := bufio.NewWriter(w)
 		cb := func(offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
-			_, err := buffered.Write(header)
+			_, err := w.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = buffered.Write(data)
+			_, err = w.Write(data)
 			if err != nil {
 				return false
 			}
@@ -584,16 +583,15 @@ NAMESPACE:
 		}
 
 		header := make([]byte, 12)
-		buffered := bufio.NewWriter(w)
 		cb := func(offset uint64, data []byte) bool {
 			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
 			binary.LittleEndian.PutUint64(header[4:], offset)
 
-			_, err := buffered.Write(header)
+			_, err := w.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = buffered.Write(data)
+			_, err = w.Write(data)
 			if err != nil {
 				return false
 			}
