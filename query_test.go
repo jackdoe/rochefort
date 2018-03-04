@@ -46,8 +46,8 @@ func BenchmarkNext1000(b *testing.B) {
 	}
 }
 
-func BenchmarkOr(b *testing.B) {
-	x := postingsList(1000000)
+func BenchmarkOr1000(b *testing.B) {
+	x := postingsList(1000)
 	y := postingsList(1000)
 
 	for n := 0; n < b.N; n++ {
@@ -63,7 +63,7 @@ func BenchmarkOr(b *testing.B) {
 	}
 }
 
-func BenchmarkAnd(b *testing.B) {
+func BenchmarkAnd1000(b *testing.B) {
 	x := postingsList(1000000)
 	y := postingsList(1000)
 
