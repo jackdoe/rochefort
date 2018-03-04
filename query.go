@@ -25,32 +25,20 @@ func (q *QueryBase) GetDocId() int64 {
 }
 
 type Term struct {
-	cursor    int
-	postings  []int64
-	nPostings int
+	cursor   int
+	postings []int64
 	QueryBase
 }
 
 func NewTerm(postings []int64) *Term {
-	nPostings := len(postings)
 	return &Term{
 		cursor:    -1,
 		postings:  postings,
-		nPostings: nPostings,
 		QueryBase: QueryBase{NOT_READY},
 	}
 
 }
 func (t *Term) advance(target int64) int64 {
-	if t.cursor+1 < t.nPostings {
-		// XXX: dont binary search if we are asked to advance to the next target
-		if t.postings[t.cursor+1] == target {
-			t.cursor++
-			t.docId = target
-			return target
-
-		}
-	}
 	if t.docId == NO_MORE || t.docId == target || target == NO_MORE {
 		t.docId = target
 		return t.docId
@@ -60,7 +48,7 @@ func (t *Term) advance(target int64) int64 {
 	}
 
 	start := t.cursor
-	end := t.nPostings
+	end := len(t.postings)
 
 	for start < end {
 		mid := start + ((end - start) / 2)
@@ -88,7 +76,7 @@ func (t *Term) advance(target int64) int64 {
 
 func (t *Term) Next() int64 {
 	t.cursor++
-	if t.cursor >= t.nPostings {
+	if t.cursor >= len(t.postings) {
 		t.docId = NO_MORE
 	} else {
 		t.docId = t.postings[t.cursor]
