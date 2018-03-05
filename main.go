@@ -351,6 +351,13 @@ func (this *MultiStore) close(storageIdentifier string) {
 	storage, ok := this.stores[storageIdentifier]
 	if ok {
 		storage.descriptor.Close()
+		storage.Lock()
+		for name, i := range storage.index {
+			log.Printf("closing: %s/%s.postings", storage.root, name)
+			i.descriptor.Close()
+		}
+		storage.index = make(map[string]*PostingsList)
+		storage.Unlock()
 		log.Printf("closing: %s", storage.path)
 	}
 	delete(this.stores, storageIdentifier)
@@ -455,6 +462,10 @@ NAMESPACE:
 		for _, storage := range multiStore.stores {
 			storage.Lock() // dont unlock it
 			storage.descriptor.Close()
+			for name, i := range storage.index {
+				log.Printf("closing: %s/%s.postings", storage.root, name)
+				i.descriptor.Close()
+			}
 			log.Printf("closing: %s", storage.path)
 		}
 		os.Exit(0)
