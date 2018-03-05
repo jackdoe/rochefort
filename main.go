@@ -59,7 +59,7 @@ type StoreItem struct {
 	sync.RWMutex
 }
 
-var nonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9]+")
+var nonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
 func sanitize(s string) string {
 	return nonAlphaNumeric.ReplaceAllLiteralString(s, "")
