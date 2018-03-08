@@ -45,7 +45,7 @@ dont forget to mount persisted root directory
 ## compile from source
 
 ```
-$ go run main.go -bind :8000 -root /tmp
+$ go run main.go query.go -bind :8000 -root /tmp
 2018/02/10 12:06:21 starting http server on :8000
 ....
 
