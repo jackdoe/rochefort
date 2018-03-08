@@ -109,10 +109,21 @@ func NewStorage(root string) *StoreItem {
 	return si
 }
 
+func (this *StoreItem) GetPostingsList(name string) *PostingsList {
+	name = sanitize(name)
+	this.RLock()
+	defer this.RUnlock()
+
+	if p, ok := this.index[name]; ok {
+		return p
+	}
+	return nil
+}
+
 func (this *StoreItem) CreatePostingsList(name string) *PostingsList {
+	name = sanitize(name)
 	this.RLock()
 
-	name = sanitize(name)
 	if p, ok := this.index[name]; ok {
 		this.RUnlock()
 		return p

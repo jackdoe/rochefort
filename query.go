@@ -209,7 +209,12 @@ func fromJSON(store *StoreItem, input interface{}) (Query, error) {
 			if !ok {
 				return nil, errors.New("[tag] must be a string")
 			}
-			queries = append(queries, store.CreatePostingsList(value).newTermQuery())
+			pl := store.GetPostingsList(value)
+			if pl == nil {
+				queries = append(queries, NewTerm([]int64{}))
+			} else {
+				queries = append(queries, pl.newTermQuery())
+			}
 		}
 		if v, ok := mapped["and"]; ok && v != nil {
 			list, ok := v.([]interface{})
