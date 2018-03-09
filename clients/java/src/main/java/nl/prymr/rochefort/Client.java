@@ -17,7 +17,7 @@ import static nl.prymr.rochefort.Util.convertStreamToString;
 import static nl.prymr.rochefort.Util.readFully;
 
 public class Client {
-  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify, urlStats, urlQuery;
+  private String urlGetMulti, urlGet, urlAppend, urlScan, urlModify, urlStats, urlQuery, urlDelete;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -43,6 +43,7 @@ public class Client {
     this.urlScan = prefix + "scan";
     this.urlQuery = prefix + "query";
     this.urlStats = prefix + "stat";
+    this.urlDelete = prefix + "delete";
   }
 
   public static String join(String join, String... strings) {
@@ -156,6 +157,25 @@ public class Client {
       s.Tags.put(tag, tags.getLong(tag));
     }
     return s;
+  }
+
+  public static boolean delete(String urlDelete, String namespace) throws Exception {
+    HttpResponse<JsonNode> response =
+        Unirest.get(urlDelete).queryString("namespace", namespace).asJson();
+    if (response.getStatus() != 200) {
+      throw new Exception(
+          "status code "
+              + response.getStatus()
+              + " url: "
+              + urlDelete
+              + " namespace: "
+              + namespace
+              + " body: "
+              + convertStreamToString(response.getRawBody()));
+    }
+
+    JSONObject obj = response.getBody().getObject();
+    return obj.getBoolean("success");
   }
 
   public static List<byte[]> getMulti(
@@ -351,6 +371,10 @@ public class Client {
 
   public Stats stats(String namespace) throws Exception {
     return stats(this.urlStats, namespace);
+  }
+
+  public boolean delete(String namespace) throws Exception {
+    return delete(this.urlDelete, namespace);
   }
 
   public static class Stats {

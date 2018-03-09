@@ -374,6 +374,28 @@ func (this *MultiStore) close(storageIdentifier string) {
 	delete(this.stores, storageIdentifier)
 }
 
+func (this *MultiStore) delete(storageIdentifier string) {
+	this.Lock()
+	defer this.Unlock()
+	if storageIdentifier == "" {
+		storageIdentifier = "default"
+	}
+	storage, ok := this.stores[storageIdentifier]
+	if ok {
+		storage.descriptor.Close()
+		storage.Lock()
+		for name, i := range storage.index {
+			log.Printf("closing (tobe deleted): %s/%s.postings", storage.root, name)
+			i.descriptor.Close()
+		}
+		storage.index = make(map[string]*PostingsList)
+		storage.Unlock()
+		log.Printf("closing (tobe deleted): %s", storage.path)
+		os.RemoveAll(storage.root)
+	}
+	delete(this.stores, storageIdentifier)
+}
+
 func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos int32, data io.Reader) error {
 	return this.find(storageIdentifier).modify(offset, pos, data)
 }
@@ -485,6 +507,12 @@ NAMESPACE:
 
 	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
 		multiStore.close(r.URL.Query().Get(namespaceKey))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("{\"success\":true}"))
+	})
+
+	http.HandleFunc("/delete", func(w http.ResponseWriter, r *http.Request) {
+		multiStore.delete(r.URL.Query().Get(namespaceKey))
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("{\"success\":true}"))
 	})
