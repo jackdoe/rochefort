@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package main;
+
+message Modify {
+        string namespace = 1;
+        int32 pos = 2;
+        uint64 offset = 3;
+        bytes data = 4;
+}
+message Append {
+        string namespace = 1;
+        uint32 allocSize = 2;
+        repeated string tags = 4;
+        bytes data = 5;
+}
+
+message AppendInput {
+        repeated Append appendPayload = 1;
+        repeated Modify modifyPayload = 2;
+}
+
+message AppendOutput {
+        repeated uint64 offset = 1;
+        uint64 modifiedCount = 2;
+}
+
+message NamespaceInput {
+        string namespace = 1;
+}
+
+message SuccessOutput {
+        bool success = 1;
+}
+
+message Get {
+        string namespace = 1;
+        uint64 offset = 2;
+        
+}
+
+message GetInput {
+        repeated Get getPayload = 1;
+}
+
+message ScanOutput {
+        bytes data = 1;
+        uint64 offset = 2;
+}
+
+message GetOutput {
+        repeated bytes data = 1;
+}
+
+message StatsOutput {
+        map<string,uint64> tags = 1;
+        uint64 offset = 2;
+        string file = 3;
+}
+
