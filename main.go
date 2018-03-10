@@ -402,6 +402,8 @@ func Log(handler http.Handler) http.Handler {
 	})
 }
 
+const namespaceKey = "namespace"
+
 func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp/rochefort", "root directory")
@@ -629,31 +631,28 @@ NAMESPACE:
 	})
 
 	http.HandleFunc("/scan", func(w http.ResponseWriter, r *http.Request) {
-		input, success := unmarshalNamespaceInput(w, r)
-		if !success {
-			return
-		}
+		w.Header().Set("Content-Type", "application/octet-stream")
 
-		w.Header().Set("Content-Type", "application/protobuf")
-
+		header := make([]byte, 12)
 		cb := func(offset uint64, data []byte) bool {
-			out := &ScanOutput{
-				Data:   data,
-				Offset: offset,
-			}
-			m, err := out.Marshal()
+			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
+			binary.LittleEndian.PutUint64(header[4:], offset)
+
+			_, err := w.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = w.Write(m)
-			return err == nil
+			_, err = w.Write(data)
+			if err != nil {
+				return false
+			}
+			return true
 		}
-		multiStore.scan(input.Namespace, cb)
+		multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
 	})
 
-	// XXX: leave the input for this to be json, much easier, but spit out protobuf
 	http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/protobuf")
+		w.Header().Set("Content-Type", "application/octet-stream")
 
 		defer r.Body.Close()
 		body, err := ioutil.ReadAll(r.Body)
@@ -670,7 +669,7 @@ NAMESPACE:
 			w.Write([]byte(err.Error()))
 			return
 		}
-		stored := multiStore.find(r.URL.Query().Get("namespace"))
+		stored := multiStore.find(r.URL.Query().Get(namespaceKey))
 
 		query, err := fromJSON(stored, decoded)
 		if err != nil {
@@ -679,19 +678,21 @@ NAMESPACE:
 			return
 		}
 
+		header := make([]byte, 12)
 		cb := func(offset uint64, data []byte) bool {
-			out := &ScanOutput{
-				Data:   data,
-				Offset: offset,
-			}
-			m, err := out.Marshal()
+			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
+			binary.LittleEndian.PutUint64(header[4:], offset)
+
+			_, err := w.Write(header)
 			if err != nil {
 				return false
 			}
-			_, err = w.Write(m)
-			return err == nil
+			_, err = w.Write(data)
+			if err != nil {
+				return false
+			}
+			return true
 		}
-
 		stored.ExecuteQuery(query, cb)
 	})
 
