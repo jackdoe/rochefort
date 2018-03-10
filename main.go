@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dgryski/go-metro"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,19 +14,12 @@ import (
 	"os/signal"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 )
-
-type Stats struct {
-	Tags   map[string]uint64
-	Offset uint64
-	File   string
-}
 
 type PostingsList struct {
 	descriptor *os.File
@@ -145,8 +137,8 @@ func (this *StoreItem) CreatePostingsList(name string) *PostingsList {
 	return p
 }
 
-func (this *StoreItem) stats() *Stats {
-	out := &Stats{
+func (this *StoreItem) stats() *StatsOutput {
+	out := &StatsOutput{
 		Tags:   make(map[string]uint64),
 		Offset: this.offset,
 		File:   this.path,
@@ -252,27 +244,22 @@ func (this *StoreItem) appendPostings(name string, value uint64) {
 	p.descriptor.WriteAt(data, int64(offset))
 }
 
-func (this *StoreItem) read(offset uint64) (uint32, []byte, error) {
+func (this *StoreItem) read(offset uint64) ([]byte, error) {
 	// lockless read
 	dataLen, _, _, err := readHeader(this.descriptor, offset)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	output := make([]byte, dataLen)
 	_, err = this.descriptor.ReadAt(output, int64(offset)+int64(headerLen))
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
-	return dataLen, output, nil
+	return output, nil
 }
 
-func (this *StoreItem) append(allocSize uint32, data io.Reader) (uint64, error) {
-	dataRaw, err := ioutil.ReadAll(data)
-	if err != nil {
-		return 0, err
-	}
-
+func (this *StoreItem) append(allocSize uint32, dataRaw []byte) (uint64, error) {
 	if len(dataRaw) > int(allocSize) {
 		allocSize = uint32(len(dataRaw))
 	}
@@ -280,7 +267,7 @@ func (this *StoreItem) append(allocSize uint32, data io.Reader) (uint64, error) 
 	offset := atomic.AddUint64(&this.offset, uint64(allocSize+headerLen))
 
 	currentOffset := offset - uint64(allocSize+headerLen)
-	_, err = this.descriptor.WriteAt(dataRaw, int64(currentOffset+headerLen))
+	_, err := this.descriptor.WriteAt(dataRaw, int64(currentOffset+headerLen))
 	if err != nil {
 		panic(err)
 	}
@@ -290,12 +277,7 @@ func (this *StoreItem) append(allocSize uint32, data io.Reader) (uint64, error) 
 	return currentOffset, nil
 }
 
-func (this *StoreItem) modify(offset uint64, pos int32, data io.Reader) error {
-	dataRaw, err := ioutil.ReadAll(data)
-	if err != nil {
-		return err
-	}
-
+func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte) error {
 	oldDataLen, _, allocSize, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return err
@@ -396,20 +378,8 @@ func (this *MultiStore) delete(storageIdentifier string) {
 	delete(this.stores, storageIdentifier)
 }
 
-func (this *MultiStore) modify(storageIdentifier string, offset uint64, pos int32, data io.Reader) error {
-	return this.find(storageIdentifier).modify(offset, pos, data)
-}
-
-func (this *MultiStore) stats(storageIdentifier string) *Stats {
+func (this *MultiStore) stats(storageIdentifier string) *StatsOutput {
 	return this.find(storageIdentifier).stats()
-}
-
-func (this *MultiStore) append(storageIdentifier string, allocSize uint32, data io.Reader) (uint64, error) {
-	return this.find(storageIdentifier).append(allocSize, data)
-}
-
-func (this *MultiStore) read(storageIdentifier string, offset uint64) (uint32, []byte, error) {
-	return this.find(storageIdentifier).read(offset)
 }
 
 func (this *MultiStore) scan(storageIdentifier string, cb func(uint64, []byte) bool) {
@@ -431,27 +401,6 @@ func Log(handler http.Handler) http.Handler {
 		log.Printf("%s %s %s took: %d", r.RemoteAddr, r.Method, r.URL, makeTimestamp()-t0)
 	})
 }
-
-func getTags(tags string) []string {
-	if tags == "" {
-		return []string{}
-	}
-	splitted := strings.Split(tags, ",")
-	out := []string{}
-	for _, s := range splitted {
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-
-}
-
-const namespaceKey = "namespace"
-const posKey = "pos"
-const allocSizeKey = "allocSize"
-const offsetKey = "offset"
-const tagsKey = "tags"
 
 func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
@@ -505,108 +454,206 @@ NAMESPACE:
 
 	}()
 
-	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
-		multiStore.close(r.URL.Query().Get(namespaceKey))
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("{\"success\":true}"))
-	})
-
-	http.HandleFunc("/delete", func(w http.ResponseWriter, r *http.Request) {
-		multiStore.delete(r.URL.Query().Get(namespaceKey))
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("{\"success\":true}"))
-	})
-
-	http.HandleFunc("/modify", func(w http.ResponseWriter, r *http.Request) {
-		offset, err := strconv.ParseUint(r.URL.Query().Get(offsetKey), 10, 64)
+	unmarshalNamespaceInput := func(w http.ResponseWriter, r *http.Request) (*NamespaceInput, bool) {
+		defer r.Body.Close()
+		dataRaw, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
-		} else {
-			pos, err := strconv.ParseInt(r.URL.Query().Get(posKey), 10, 32)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-			} else {
-				err := multiStore.modify(r.URL.Query().Get(namespaceKey), offset, int32(pos), r.Body)
+			return nil, false
+		}
+		input := &NamespaceInput{}
+		err = input.Unmarshal(dataRaw)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return nil, false
+		}
+		return input, true
+
+	}
+	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
+		input, success := unmarshalNamespaceInput(w, r)
+		if !success {
+			return
+		}
+
+		multiStore.close(input.Namespace)
+
+		w.Header().Set("Content-Type", "application/protobuf")
+		out := &SuccessOutput{}
+		m, err := out.Marshal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(m)
+	})
+
+	http.HandleFunc("/delete", func(w http.ResponseWriter, r *http.Request) {
+		input, success := unmarshalNamespaceInput(w, r)
+		if !success {
+			return
+		}
+
+		multiStore.delete(input.Namespace)
+
+		w.Header().Set("Content-Type", "application/protobuf")
+		out := &SuccessOutput{}
+		m, err := out.Marshal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(m)
+	})
+
+	http.HandleFunc("/set", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		dataRaw, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		input := AppendInput{}
+		err = input.Unmarshal(dataRaw)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		var last *StoreItem
+		lastns := ""
+		out := &AppendOutput{}
+
+		if input.AppendPayload != nil {
+			out.Offset = make([]uint64, len(input.AppendPayload))
+			for idx, item := range input.AppendPayload {
+				if last == nil || lastns != item.Namespace {
+					lastns = item.Namespace
+					last = multiStore.find(item.Namespace)
+				}
+				offset, err := last.append(item.AllocSize, item.Data)
 				if err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					w.Write([]byte(err.Error()))
-				} else {
-					w.Header().Set("Content-Type", "application/json")
-					w.Write([]byte("{\"success\":true}"))
+					return
+				}
+
+				out.Offset[idx] = offset
+				if item.Tags != nil {
+					for _, t := range item.Tags {
+						last.appendPostings(t, offset)
+					}
 				}
 			}
 		}
+
+		if input.ModifyPayload != nil {
+			for _, item := range input.ModifyPayload {
+				if last == nil || lastns != item.Namespace {
+					lastns = item.Namespace
+					last = multiStore.find(item.Namespace)
+				}
+				err := last.modify(item.Offset, item.Pos, item.Data)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte(err.Error()))
+					return
+				}
+				out.ModifiedCount++
+			}
+		}
+		m, err := out.Marshal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/protobuf")
+		w.Write(m)
+
 	})
 
-	http.HandleFunc("/append", func(w http.ResponseWriter, r *http.Request) {
-		allocSize := uint64(0)
-		if r.URL.Query().Get(allocSizeKey) != "" {
-			allocSizeInput, err := strconv.ParseUint(r.URL.Query().Get(allocSizeKey), 10, 64)
+	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		dataRaw, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		input := GetInput{}
+		err = input.Unmarshal(dataRaw)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		if input.GetPayload != nil {
+			var last *StoreItem
+			lastns := ""
+			out := &GetOutput{
+				Data: make([][]byte, len(input.GetPayload)),
+			}
+
+			for idx, item := range input.GetPayload {
+				if last == nil || lastns != item.Namespace {
+					lastns = item.Namespace
+					last = multiStore.find(item.Namespace)
+				}
+				item, err := last.read(item.Offset)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte(err.Error()))
+					return
+				}
+
+				out.Data[idx] = item
+			}
+
+			m, err := out.Marshal()
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))
 				return
-			} else {
-				allocSize = allocSizeInput
 			}
-		}
-		store := multiStore.find(r.URL.Query().Get(namespaceKey))
-		offset, err := store.append(uint32(allocSize), r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-		} else {
-			tags := getTags(r.URL.Query().Get(tagsKey))
-			for _, t := range tags {
-				store.appendPostings(t, offset)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(fmt.Sprintf("{\"offset\":%d}", offset)))
-		}
-	})
 
-	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
-		offset, err := strconv.ParseUint(r.URL.Query().Get(offsetKey), 10, 64)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-		} else {
-			_, data, err := multiStore.read(r.URL.Query().Get(namespaceKey), offset)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-			} else {
-				w.Header().Set("Content-Type", "application/octet-stream")
-				w.Write(data)
-			}
+			w.Header().Set("Content-Type", "application/protobuf")
+			w.Write(m)
 		}
 	})
 
 	http.HandleFunc("/scan", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-
-		header := make([]byte, 12)
-		cb := func(offset uint64, data []byte) bool {
-			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
-			binary.LittleEndian.PutUint64(header[4:], offset)
-
-			_, err := w.Write(header)
-			if err != nil {
-				return false
-			}
-			_, err = w.Write(data)
-			if err != nil {
-				return false
-			}
-			return true
+		input, success := unmarshalNamespaceInput(w, r)
+		if !success {
+			return
 		}
-		multiStore.scan(r.URL.Query().Get(namespaceKey), cb)
+
+		w.Header().Set("Content-Type", "application/protobuf")
+
+		cb := func(offset uint64, data []byte) bool {
+			out := &ScanOutput{
+				Data:   data,
+				Offset: offset,
+			}
+			m, err := out.Marshal()
+			if err != nil {
+				return false
+			}
+			_, err = w.Write(m)
+			return err == nil
+		}
+		multiStore.scan(input.Namespace, cb)
 	})
 
+	// XXX: leave the input for this to be json, much easier, but spit out protobuf
 	http.HandleFunc("/query", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", "application/protobuf")
 
 		defer r.Body.Close()
 		body, err := ioutil.ReadAll(r.Body)
@@ -623,7 +670,7 @@ NAMESPACE:
 			w.Write([]byte(err.Error()))
 			return
 		}
-		stored := multiStore.find(r.URL.Query().Get(namespaceKey))
+		stored := multiStore.find(r.URL.Query().Get("namespace"))
 
 		query, err := fromJSON(stored, decoded)
 		if err != nil {
@@ -632,75 +679,38 @@ NAMESPACE:
 			return
 		}
 
-		header := make([]byte, 12)
 		cb := func(offset uint64, data []byte) bool {
-			binary.LittleEndian.PutUint32(header[0:], uint32(len(data)))
-			binary.LittleEndian.PutUint64(header[4:], offset)
-
-			_, err := w.Write(header)
+			out := &ScanOutput{
+				Data:   data,
+				Offset: offset,
+			}
+			m, err := out.Marshal()
 			if err != nil {
 				return false
 			}
-			_, err = w.Write(data)
-			if err != nil {
-				return false
-			}
-			return true
+			_, err = w.Write(m)
+			return err == nil
 		}
+
 		stored.ExecuteQuery(query, cb)
 	})
 
 	http.HandleFunc("/stat", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		stats := multiStore.stats(r.URL.Query().Get(namespaceKey))
-		b, err := json.Marshal(stats)
+		input, success := unmarshalNamespaceInput(w, r)
+		if !success {
+			return
+		}
+
+		stats := multiStore.stats(input.Namespace)
+		m, err := stats.Marshal()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(b)
-		}
-	})
-
-	http.HandleFunc("/getMulti", func(w http.ResponseWriter, r *http.Request) {
-		dataLenRaw := make([]byte, 4)
-		defer r.Body.Close()
-		b, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("read: %s", err.Error())))
 			return
 		}
 
-		namespace := r.URL.Query().Get(namespaceKey)
-
-		if len(b)%8 != 0 {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("incomplete read: %d is not multiple of 8", len(b))))
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/octet-stream")
-		for i := 0; i < len(b); i += 8 {
-			offset := binary.LittleEndian.Uint64(b[i:])
-			_, data, err := multiStore.read(namespace, offset)
-
-			// XXX: we ignore the error on purpose
-			// as the storage is not fsyncing, it could very well lose some updates
-			// also the data is barely checksummed, so might very well be corrupted
-			if err == nil {
-				binary.LittleEndian.PutUint32(dataLenRaw, uint32(len(data)))
-				_, err = w.Write(dataLenRaw)
-				if err != nil {
-					return
-				}
-				_, err = w.Write(data)
-				if err != nil {
-					return
-				}
-			}
-		}
+		w.Header().Set("Content-Type", "application/protobuf")
+		w.Write(m)
 	})
 
 	if !*pquiet {
