@@ -66,8 +66,8 @@ public class ClientTest extends TestCase {
     assertEquals(matching.get(0), "abc");
     assertEquals(matching.get(1), "zzz");
 
-    Client.Stats s = client.stats("search");
-    assertEquals(Long.valueOf(3), s.Tags.get("jaz"));
+    Proto.StatsOutput s = client.stats("search");
+    assertEquals(Long.valueOf(3), s.getTagsMap().get("jaz"));
   }
 
   public void testModify() throws Exception {
@@ -149,7 +149,7 @@ public class ClientTest extends TestCase {
   }
 
   public void testManyAsync() throws Exception {
-    int threadCount = 10;
+    int threadCount = 5;
     Callable<Long> task =
         new Callable<Long>() {
           @Override
