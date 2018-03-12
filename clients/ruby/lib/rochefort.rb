@@ -1,6 +1,7 @@
 require 'rest-client'
 require 'uri'
 require 'json'
+require 'input_pb'
 
 # client for https://github.com/jackdoe/rochefort - disk speed append + offset service (poor man's kafka),
 # example usage

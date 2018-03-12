@@ -474,6 +474,7 @@ NAMESPACE:
 		return input, true
 
 	}
+
 	http.HandleFunc("/close", func(w http.ResponseWriter, r *http.Request) {
 		input, success := unmarshalNamespaceInput(w, r)
 		if !success {

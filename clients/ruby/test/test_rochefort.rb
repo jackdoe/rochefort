@@ -110,9 +110,9 @@ class RochefortTest < Minitest::Unit::TestCase
             everything_so_far[offset] = fetched
 
             matching = 0
-            r.scan(namespace: ns, open_timeout: 10) do |offset, v|
-              if !everything_so_far[offset]
-                raise "expected ${offset}"
+            r.scan(namespace: ns, open_timeout: 10) do |soffset, v|
+              if !everything_so_far[soffset]
+                raise "expected ${soffset}"
               end
               matching += 1
             end
