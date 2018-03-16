@@ -1,3 +1,4 @@
+** works with rochefort < 2.0 **
 
 $ gem install rochefort
 
