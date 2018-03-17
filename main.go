@@ -277,7 +277,7 @@ func (this *StoreItem) append(allocSize uint32, dataRaw []byte) (uint64, error) 
 	return currentOffset, nil
 }
 
-func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte) error {
+func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte, resetLength bool) error {
 	oldDataLen, _, allocSize, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return err
@@ -288,6 +288,7 @@ func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte) error {
 	}
 
 	end := uint32(pos) + uint32(len(dataRaw))
+
 	if end > allocSize {
 		return errors.New("pos+len > allocSize")
 	}
@@ -297,7 +298,7 @@ func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte) error {
 		panic(err)
 	}
 
-	if end > oldDataLen {
+	if end > oldDataLen || resetLength {
 		// need to recompute the header
 		this.writeHeader(offset, end, 0, allocSize)
 	}
@@ -561,7 +562,7 @@ NAMESPACE:
 					lastns = item.Namespace
 					last = multiStore.find(item.Namespace)
 				}
-				err := last.modify(item.Offset, item.Pos, item.Data)
+				err := last.modify(item.Offset, item.Pos, item.Data, item.ResetLength)
 				if err != nil {
 					w.WriteHeader(http.StatusInternalServerError)
 					w.Write([]byte(err.Error()))

@@ -70,13 +70,15 @@ public class Client {
   }
 
   public static boolean modify(
-      String urlSet, String namespace, long offset, int position, byte[] data) throws Exception {
+      String urlSet, String namespace, long offset, int position, boolean resetLength, byte[] data)
+      throws Exception {
     Proto.Modify modifyPayload =
         Proto.Modify.newBuilder()
             .setData(ByteString.copyFrom(data))
             .setNamespace(namespace)
             .setOffset(offset)
             .setPos(position)
+            .setResetLength(resetLength)
             .build();
     Proto.AppendInput input =
         Proto.AppendInput.newBuilder().addModifyPayload(modifyPayload).build();
@@ -240,12 +242,15 @@ public class Client {
     return out;
   }
 
-  public boolean modify(long offset, int position, byte[] data) throws Exception {
-    return modify("", offset, position, data);
+  public boolean modify(long offset, int position, boolean resetLength, byte[] data)
+      throws Exception {
+    return modify("", offset, position, resetLength, data);
   }
 
-  public boolean modify(String namespace, long offset, int position, byte[] data) throws Exception {
-    return modify(this.urlSet, namespace, offset, position, data);
+  public boolean modify(
+      String namespace, long offset, int position, boolean resetLength, byte[] data)
+      throws Exception {
+    return modify(this.urlSet, namespace, offset, position, resetLength, data);
   }
 
   public long append(byte[] data) throws Exception {

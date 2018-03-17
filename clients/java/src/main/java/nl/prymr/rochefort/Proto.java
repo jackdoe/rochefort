@@ -42,6 +42,11 @@ public final class Proto {
      * <code>bytes data = 4;</code>
      */
     com.google.protobuf.ByteString getData();
+
+    /**
+     * <code>bool resetLength = 5;</code>
+     */
+    boolean getResetLength();
   }
   /**
    * Protobuf type {@code main.Modify}
@@ -60,6 +65,7 @@ public final class Proto {
       pos_ = 0;
       offset_ = 0L;
       data_ = com.google.protobuf.ByteString.EMPTY;
+      resetLength_ = false;
     }
 
     @java.lang.Override
@@ -112,6 +118,11 @@ public final class Proto {
             case 34: {
 
               data_ = input.readBytes();
+              break;
+            }
+            case 40: {
+
+              resetLength_ = input.readBool();
               break;
             }
           }
@@ -199,6 +210,15 @@ public final class Proto {
       return data_;
     }
 
+    public static final int RESETLENGTH_FIELD_NUMBER = 5;
+    private boolean resetLength_;
+    /**
+     * <code>bool resetLength = 5;</code>
+     */
+    public boolean getResetLength() {
+      return resetLength_;
+    }
+
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
       byte isInitialized = memoizedIsInitialized;
@@ -223,6 +243,9 @@ public final class Proto {
       if (!data_.isEmpty()) {
         output.writeBytes(4, data_);
       }
+      if (resetLength_ != false) {
+        output.writeBool(5, resetLength_);
+      }
       unknownFields.writeTo(output);
     }
 
@@ -245,6 +268,10 @@ public final class Proto {
       if (!data_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(4, data_);
+      }
+      if (resetLength_ != false) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(5, resetLength_);
       }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
@@ -270,6 +297,8 @@ public final class Proto {
           == other.getOffset());
       result = result && getData()
           .equals(other.getData());
+      result = result && (getResetLength()
+          == other.getResetLength());
       result = result && unknownFields.equals(other.unknownFields);
       return result;
     }
@@ -290,6 +319,9 @@ public final class Proto {
           getOffset());
       hash = (37 * hash) + DATA_FIELD_NUMBER;
       hash = (53 * hash) + getData().hashCode();
+      hash = (37 * hash) + RESETLENGTH_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+          getResetLength());
       hash = (29 * hash) + unknownFields.hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -427,6 +459,8 @@ public final class Proto {
 
         data_ = com.google.protobuf.ByteString.EMPTY;
 
+        resetLength_ = false;
+
         return this;
       }
 
@@ -453,6 +487,7 @@ public final class Proto {
         result.pos_ = pos_;
         result.offset_ = offset_;
         result.data_ = data_;
+        result.resetLength_ = resetLength_;
         onBuilt();
         return result;
       }
@@ -506,6 +541,9 @@ public final class Proto {
         }
         if (other.getData() != com.google.protobuf.ByteString.EMPTY) {
           setData(other.getData());
+        }
+        if (other.getResetLength() != false) {
+          setResetLength(other.getResetLength());
         }
         this.mergeUnknownFields(other.unknownFields);
         onChanged();
@@ -680,6 +718,32 @@ public final class Proto {
       public Builder clearData() {
         
         data_ = getDefaultInstance().getData();
+        onChanged();
+        return this;
+      }
+
+      private boolean resetLength_ ;
+      /**
+       * <code>bool resetLength = 5;</code>
+       */
+      public boolean getResetLength() {
+        return resetLength_;
+      }
+      /**
+       * <code>bool resetLength = 5;</code>
+       */
+      public Builder setResetLength(boolean value) {
+        
+        resetLength_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bool resetLength = 5;</code>
+       */
+      public Builder clearResetLength() {
+        
+        resetLength_ = false;
         onChanged();
         return this;
       }
@@ -7687,24 +7751,25 @@ public final class Proto {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\013input.proto\022\004main\"F\n\006Modify\022\021\n\tnamespa" +
+      "\n\013input.proto\022\004main\"[\n\006Modify\022\021\n\tnamespa" +
       "ce\030\001 \001(\t\022\013\n\003pos\030\002 \001(\005\022\016\n\006offset\030\003 \001(\004\022\014\n" +
-      "\004data\030\004 \001(\014\"J\n\006Append\022\021\n\tnamespace\030\001 \001(\t" +
-      "\022\021\n\tallocSize\030\002 \001(\r\022\014\n\004tags\030\004 \003(\t\022\014\n\004dat" +
-      "a\030\005 \001(\014\"W\n\013AppendInput\022#\n\rappendPayload\030" +
-      "\001 \003(\0132\014.main.Append\022#\n\rmodifyPayload\030\002 \003" +
-      "(\0132\014.main.Modify\"5\n\014AppendOutput\022\016\n\006offs" +
-      "et\030\001 \003(\004\022\025\n\rmodifiedCount\030\002 \001(\004\"#\n\016Names" +
-      "paceInput\022\021\n\tnamespace\030\001 \001(\t\" \n\rSuccessO" +
-      "utput\022\017\n\007success\030\001 \001(\010\"(\n\003Get\022\021\n\tnamespa" +
-      "ce\030\001 \001(\t\022\016\n\006offset\030\002 \001(\004\")\n\010GetInput\022\035\n\n" +
-      "getPayload\030\001 \003(\0132\t.main.Get\"*\n\nScanOutpu" +
-      "t\022\014\n\004data\030\001 \001(\014\022\016\n\006offset\030\002 \001(\004\"\031\n\tGetOu" +
-      "tput\022\014\n\004data\030\001 \003(\014\"\203\001\n\013StatsOutput\022)\n\004ta" +
-      "gs\030\001 \003(\0132\033.main.StatsOutput.TagsEntry\022\016\n" +
-      "\006offset\030\002 \001(\004\022\014\n\004file\030\003 \001(\t\032+\n\tTagsEntry" +
-      "\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\004:\0028\001B\033\n\022nl.p" +
-      "rymr.rochefortB\005Protob\006proto3"
+      "\004data\030\004 \001(\014\022\023\n\013resetLength\030\005 \001(\010\"J\n\006Appe" +
+      "nd\022\021\n\tnamespace\030\001 \001(\t\022\021\n\tallocSize\030\002 \001(\r" +
+      "\022\014\n\004tags\030\004 \003(\t\022\014\n\004data\030\005 \001(\014\"W\n\013AppendIn" +
+      "put\022#\n\rappendPayload\030\001 \003(\0132\014.main.Append" +
+      "\022#\n\rmodifyPayload\030\002 \003(\0132\014.main.Modify\"5\n" +
+      "\014AppendOutput\022\016\n\006offset\030\001 \003(\004\022\025\n\rmodifie" +
+      "dCount\030\002 \001(\004\"#\n\016NamespaceInput\022\021\n\tnamesp" +
+      "ace\030\001 \001(\t\" \n\rSuccessOutput\022\017\n\007success\030\001 " +
+      "\001(\010\"(\n\003Get\022\021\n\tnamespace\030\001 \001(\t\022\016\n\006offset\030" +
+      "\002 \001(\004\")\n\010GetInput\022\035\n\ngetPayload\030\001 \003(\0132\t." +
+      "main.Get\"*\n\nScanOutput\022\014\n\004data\030\001 \001(\014\022\016\n\006" +
+      "offset\030\002 \001(\004\"\031\n\tGetOutput\022\014\n\004data\030\001 \003(\014\"" +
+      "\203\001\n\013StatsOutput\022)\n\004tags\030\001 \003(\0132\033.main.Sta" +
+      "tsOutput.TagsEntry\022\016\n\006offset\030\002 \001(\004\022\014\n\004fi" +
+      "le\030\003 \001(\t\032+\n\tTagsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005va" +
+      "lue\030\002 \001(\004:\0028\001B\033\n\022nl.prymr.rochefortB\005Pro" +
+      "tob\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -7723,7 +7788,7 @@ public final class Proto {
     internal_static_main_Modify_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_main_Modify_descriptor,
-        new java.lang.String[] { "Namespace", "Pos", "Offset", "Data", });
+        new java.lang.String[] { "Namespace", "Pos", "Offset", "Data", "ResetLength", });
     internal_static_main_Append_descriptor =
       getDescriptor().getMessageTypes().get(1);
     internal_static_main_Append_fieldAccessorTable = new

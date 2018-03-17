@@ -72,11 +72,17 @@ public class ClientTest extends TestCase {
 
   public void testModify() throws Exception {
     long offset = client.append(1024, "abc".getBytes());
-    assertEquals(new String(client.get(offset)), "abc");
 
-    client.modify(offset, 1, "xyz".getBytes());
+    assertEquals(new String(client.get(offset)), "abc");
+    client.modify(offset, 1, false, "xyz".getBytes());
 
     assertEquals(new String(client.get(offset)), "axyz");
+
+    client.modify(offset, 0, true, "xyz".getBytes());
+    assertEquals(new String(client.get(offset)), "xyzz");
+
+    client.modify(offset, 0, true, "xyz".getBytes());
+    assertEquals(new String(client.get(offset)), "xyz");
 
     lookupAllOffsets.get("").put(offset, client.get(offset));
   }

@@ -11,7 +11,9 @@ message Modify {
         int32 pos = 2;
         uint64 offset = 3;
         bytes data = 4;
+        bool resetLength = 5;
 }
+
 message Append {
         string namespace = 1;
         uint32 allocSize = 2;
