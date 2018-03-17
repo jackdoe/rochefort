@@ -12,13 +12,13 @@
 
 ## run in docker
 
-run with docker: jackdoe/rochefort:2.0
+run with docker: jackdoe/rochefort:2.1
 
 ```
 docker run -e BIND=":8000" \
            -e ROOT="/tmp/rochefort" \
            -p 8000:8000 \
-           jackdoe/rochefort:2.0
+           jackdoe/rochefort:2.1
 ```
 
 ### breaking change between 0.5 and 1.0
