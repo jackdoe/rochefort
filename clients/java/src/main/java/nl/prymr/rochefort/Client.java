@@ -42,18 +42,7 @@ public class Client {
     this.urlDelete = prefix + "delete";
   }
 
-  public static long append(
-      String urlSet, String namespace, String[] tags, int allocSize, byte[] data) throws Exception {
-    Proto.Append appendPayload =
-        Proto.Append.newBuilder()
-            .addAllTags(Arrays.asList(tags == null ? new String[0] : tags))
-            .setData(ByteString.copyFrom(data))
-            .setNamespace(namespace)
-            .setAllocSize(allocSize)
-            .build();
-    Proto.AppendInput input =
-        Proto.AppendInput.newBuilder().addAppendPayload(appendPayload).build();
-
+  public static Proto.AppendOutput append(String urlSet, Proto.AppendInput input) throws Exception {
     HttpResponse<InputStream> response = Unirest.post(urlSet).body(input.toByteArray()).asBinary();
     if (response.getStatus() != 200) {
       throw new Exception(
@@ -66,7 +55,21 @@ public class Client {
     }
 
     Proto.AppendOutput out = Proto.AppendOutput.parseFrom(response.getBody());
-    return out.getOffset(0);
+    return out;
+  }
+
+  public static long append(
+      String urlSet, String namespace, String[] tags, int allocSize, byte[] data) throws Exception {
+    Proto.Append appendPayload =
+        Proto.Append.newBuilder()
+            .addAllTags(Arrays.asList(tags == null ? new String[0] : tags))
+            .setData(ByteString.copyFrom(data))
+            .setNamespace(namespace)
+            .setAllocSize(allocSize)
+            .build();
+    Proto.AppendInput input =
+        Proto.AppendInput.newBuilder().addAppendPayload(appendPayload).build();
+    return append(urlSet, input).getOffset(0);
   }
 
   public static boolean modify(
@@ -279,6 +282,10 @@ public class Client {
 
   public long append(String namespace, String[] tags, int allocSize, byte[] data) throws Exception {
     return append(this.urlSet, namespace, tags, allocSize, data);
+  }
+
+  public Proto.AppendOutput append(Proto.AppendInput input) throws Exception {
+    return append(this.urlSet, input);
   }
 
   public byte[] get(long offset) throws Exception {
