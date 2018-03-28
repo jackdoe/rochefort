@@ -220,6 +220,8 @@ func (this *StoreItem) compact() error {
 	if err != nil {
 		log.Fatalf("failed to truncate file to %d, err: %s", actualOffset, err.Error())
 	}
+
+	log.Printf("compaction %s done, old size: %d, new size: %d", this.root, this.offset, actualOffset)
 	atomic.StoreUint64(&this.offset, actualOffset)
 
 	return nil
@@ -464,7 +466,6 @@ func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp/rochefort", "root directory")
 	var ptookThresh = flag.Int("logSlowerThan", 5, "only log queries slower than N milliseconds")
-	var pquiet = flag.Bool("quiet", false, "dont print any log messages")
 	flag.Parse()
 
 	multiStore := &MultiStore{
@@ -793,16 +794,9 @@ func main() {
 		w.Write(m)
 	})
 
-	if !*pquiet {
-		log.Printf("starting http server on %s", *pbind)
-		err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux, int64(*ptookThresh)))
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		err := http.ListenAndServe(*pbind, http.DefaultServeMux)
-		if err != nil {
-			log.Fatal(err)
-		}
+	log.Printf("starting http server on %s", *pbind)
+	err = http.ListenAndServe(*pbind, Log(http.DefaultServeMux, int64(*ptookThresh)))
+	if err != nil {
+		log.Fatal(err)
 	}
 }
