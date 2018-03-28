@@ -178,11 +178,12 @@ SCAN:
 }
 
 func (this *StoreItem) compact() error {
+	this.Lock()
+	defer this.Unlock()
+
 	if len(this.index) > 0 {
 		return errors.New("can not compact indexed items")
 	}
-	this.Lock()
-	this.Unlock()
 
 	actualOffset := uint64(0)
 
@@ -214,6 +215,7 @@ func (this *StoreItem) compact() error {
 
 	// this will lose data if something was actually written in the end of the file
 	// we will also truncate it
+	//
 	err := this.descriptor.Truncate(int64(actualOffset))
 	if err != nil {
 		log.Fatalf("failed to truncate file to %d, err: %s", actualOffset, err.Error())
@@ -798,6 +800,5 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 	}
 }
