@@ -5,8 +5,10 @@
 
 * **disk write speed** storage service that returns offsets to stored values
 * if you are ok with losing some data (does not fsync on write)
-* supports: **append, multiappend, modify, get, multiget, close, query**
+* supports: **append, multiappend, modify, get, multiget, close, query, compact**
 * clients: [go](https://github.com/jackdoe/go-rochefort-client), [java](https://github.com/jackdoe/rochefort/tree/master/clients/java)
+
+## turns out when you are fine with losing some data, things are much faster and simpler :)
 
 ---
 

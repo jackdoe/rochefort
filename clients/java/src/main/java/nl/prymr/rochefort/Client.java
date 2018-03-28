@@ -15,7 +15,7 @@ import java.util.List;
 import static nl.prymr.rochefort.Util.convertStreamToString;
 
 public class Client {
-  private String urlGet, urlSet, urlScan, urlStats, urlQuery, urlDelete;
+  private String urlGet, urlSet, urlScan, urlStats, urlQuery, urlDelete, urlCompact;
 
   public Client(String url) throws Exception {
     this(new URL(url));
@@ -40,6 +40,7 @@ public class Client {
     this.urlQuery = prefix + "query";
     this.urlStats = prefix + "stat";
     this.urlDelete = prefix + "delete";
+    this.urlCompact = prefix + "compact";
   }
 
   public static Proto.AppendOutput append(String urlSet, Proto.AppendInput input) throws Exception {
@@ -130,6 +131,27 @@ public class Client {
       out.add(b.toByteArray());
     }
     return out;
+  }
+
+  public static boolean compact(String urlCompact, String namespace) throws Exception {
+    Proto.NamespaceInput input = Proto.NamespaceInput.newBuilder().setNamespace(namespace).build();
+
+    HttpResponse<InputStream> response =
+        Unirest.post(urlCompact).body(input.toByteArray()).asBinary();
+    if (response.getStatus() != 200) {
+      throw new Exception(
+          "status code "
+              + response.getStatus()
+              + " url: "
+              + urlCompact
+              + " namespace: "
+              + namespace
+              + " body: "
+              + convertStreamToString(response.getRawBody()));
+    }
+
+    Proto.SuccessOutput out = Proto.SuccessOutput.parseFrom(response.getBody());
+    return out.getSuccess();
   }
 
   public static boolean delete(String urlDelete, String namespace) throws Exception {
@@ -334,6 +356,10 @@ public class Client {
 
   public boolean delete(String namespace) throws Exception {
     return delete(this.urlDelete, namespace);
+  }
+
+  public boolean compact(String namespace) throws Exception {
+    return compact(this.urlCompact, namespace);
   }
 
   public abstract static class ScanConsumer {
