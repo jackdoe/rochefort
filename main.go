@@ -201,7 +201,7 @@ func (this *StoreItem) compact() error {
 			log.Fatalf("failed to read data at %d, err: %s", offset+headerLen, err.Error())
 		}
 
-		this.writeHeader(actualOffset, dataLen, 0, dataLen)
+		this.writeHeader(actualOffset, dataLen, dataLen)
 		_, err = this.descriptor.WriteAt(storedData, int64(actualOffset)+int64(headerLen))
 		if err != nil {
 			log.Fatalf("failed to write data at %d, err: %s", int64(actualOffset)+int64(headerLen), err.Error())
@@ -262,7 +262,7 @@ func readHeader(file *os.File, offset uint64) (uint32, uint64, uint32, error) {
 	return dataLen, nextBlock, allocSize, nil
 }
 
-func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, nextBlockOffset uint64, allocSize uint32) {
+func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, allocSize uint32) {
 	header := make([]byte, headerLen)
 
 	binary.LittleEndian.PutUint32(header[0:], uint32(dataLen))
@@ -318,7 +318,7 @@ func (this *StoreItem) append(allocSize uint32, dataRaw []byte) (uint64, error) 
 		panic(err)
 	}
 
-	this.writeHeader(currentOffset, uint32(len(dataRaw)), 0, allocSize)
+	this.writeHeader(currentOffset, uint32(len(dataRaw)), allocSize)
 
 	return currentOffset, nil
 }
@@ -346,7 +346,7 @@ func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte, resetLen
 
 	if end > oldDataLen || resetLength {
 		// need to recompute the header
-		this.writeHeader(offset, end, 0, allocSize)
+		this.writeHeader(offset, end, allocSize)
 	}
 	return nil
 }
