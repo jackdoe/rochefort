@@ -177,6 +177,52 @@ SCAN:
 	}
 }
 
+func (this *StoreItem) compact() error {
+	if len(this.index) > 0 {
+		return errors.New("can not compact indexed items")
+	}
+	this.Lock()
+	this.Unlock()
+
+	actualOffset := uint64(0)
+
+	for offset := uint64(0); offset < this.offset; {
+		// this is lockless, which means we could read a header,
+		// but the data might be incomplete
+
+		dataLen, _, allocSize, err := readHeader(this.descriptor, offset)
+		if err != nil {
+			log.Fatalf("failed to read header at %d, err: %s", offset, err.Error())
+		}
+
+		storedData := make([]byte, dataLen)
+		_, err = this.descriptor.ReadAt(storedData, int64(offset)+int64(headerLen))
+		if err != nil {
+			log.Fatalf("failed to read data at %d, err: %s", offset+headerLen, err.Error())
+		}
+
+		this.writeHeader(actualOffset, dataLen, 0, dataLen)
+		_, err = this.descriptor.WriteAt(storedData, int64(actualOffset)+int64(headerLen))
+		if err != nil {
+			log.Fatalf("failed to write data at %d, err: %s", int64(actualOffset)+int64(headerLen), err.Error())
+		}
+
+		actualOffset += uint64(dataLen) + uint64(headerLen)
+
+		offset += uint64(allocSize) + uint64(headerLen)
+	}
+
+	// this will lose data if something was actually written in the end of the file
+	// we will also truncate it
+	err := this.descriptor.Truncate(int64(actualOffset))
+	if err != nil {
+		log.Fatalf("failed to truncate file to %d, err: %s", actualOffset, err.Error())
+	}
+	atomic.StoreUint64(&this.offset, actualOffset)
+
+	return nil
+}
+
 func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
 	for query.Next() != NO_MORE {
 		offset := uint64(query.GetDocId())
@@ -229,7 +275,7 @@ func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, nextBlo
 	_, err := this.descriptor.WriteAt(header, int64(currentOffset))
 
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -387,6 +433,10 @@ func (this *MultiStore) scan(storageIdentifier string, cb func(uint64, []byte) b
 	this.find(storageIdentifier).scan(cb)
 }
 
+func (this *MultiStore) compact(storageIdentifier string) error {
+	return this.find(storageIdentifier).compact()
+}
+
 func (this *MultiStore) ExecuteQuery(storageIdentifier string, query Query, cb func(uint64, []byte) bool) {
 	this.find(storageIdentifier).ExecuteQuery(query, cb)
 }
@@ -502,6 +552,25 @@ NAMESPACE:
 		}
 
 		multiStore.delete(input.Namespace)
+
+		w.Header().Set("Content-Type", "application/protobuf")
+		out := &SuccessOutput{}
+		m, err := out.Marshal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.Write(m)
+	})
+
+	http.HandleFunc("/compact", func(w http.ResponseWriter, r *http.Request) {
+		input, success := unmarshalNamespaceInput(w, r)
+		if !success {
+			return
+		}
+
+		multiStore.compact(input.Namespace)
 
 		w.Header().Set("Content-Type", "application/protobuf")
 		out := &SuccessOutput{}
