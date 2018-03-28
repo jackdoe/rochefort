@@ -474,6 +474,7 @@ func main() {
 	// open all files in the root
 	for _, namespace := range namespaces {
 		if namespace.IsDir() {
+			// XXX: race against sigterm
 			go func(namespaceName string) {
 				files, err := ioutil.ReadDir(path.Join(*proot, namespaceName))
 				if err == nil {
