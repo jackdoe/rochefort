@@ -215,7 +215,7 @@ func (this *StoreItem) compact() error {
 
 	// this will lose data if something was actually written in the end of the file
 	// we will also truncate it
-	//
+	// make sure you are compacting data you are no longer writing to
 	err := this.descriptor.Truncate(int64(actualOffset))
 	if err != nil {
 		log.Fatalf("failed to truncate file to %d, err: %s", actualOffset, err.Error())
