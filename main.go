@@ -447,11 +447,14 @@ func makeTimestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
 }
 
-func Log(handler http.Handler) http.Handler {
+func Log(handler http.Handler, tookThresh int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t0 := makeTimestamp()
 		handler.ServeHTTP(w, r)
-		log.Printf("%s %s %s took: %d", r.RemoteAddr, r.Method, r.URL, makeTimestamp()-t0)
+		took := makeTimestamp() - t0
+		if took > tookThresh {
+			log.Printf("%s %s %s took: %d", r.RemoteAddr, r.Method, r.URL, took)
+		}
 	})
 }
 
@@ -460,6 +463,7 @@ const namespaceKey = "namespace"
 func main() {
 	var pbind = flag.String("bind", ":8000", "address to bind to")
 	var proot = flag.String("root", "/tmp/rochefort", "root directory")
+	var ptookThresh = flag.Int("logSlowerThan", 5, "only log queries slower than N milliseconds")
 	var pquiet = flag.Bool("quiet", false, "dont print any log messages")
 	flag.Parse()
 
@@ -791,7 +795,7 @@ func main() {
 
 	if !*pquiet {
 		log.Printf("starting http server on %s", *pbind)
-		err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux))
+		err := http.ListenAndServe(*pbind, Log(http.DefaultServeMux, int64(*ptookThresh)))
 		if err != nil {
 			log.Fatal(err)
 		}
