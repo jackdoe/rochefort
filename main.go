@@ -471,19 +471,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// open all files in the namespace
-NAMESPACE:
+	// open all files in the root
 	for _, namespace := range namespaces {
 		if namespace.IsDir() {
-			files, err := ioutil.ReadDir(path.Join(*proot, namespace.Name()))
-			if err == nil {
-				for _, file := range files {
-					if strings.HasSuffix(file.Name(), ".raw") {
-						multiStore.find(namespace.Name())
-						continue NAMESPACE
+			go func(namespaceName string) {
+				files, err := ioutil.ReadDir(path.Join(*proot, namespaceName))
+				if err == nil {
+					for _, file := range files {
+						if strings.HasSuffix(file.Name(), ".raw") {
+							multiStore.find(namespaceName)
+							return
+						}
 					}
 				}
-			}
+			}(namespace.Name())
 
 		}
 	}
