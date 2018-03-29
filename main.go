@@ -225,7 +225,7 @@ func (this *StoreItem) compact() error {
 			break
 		}
 		if offset != uncorruptedOffset {
-			log.Printf("%s found corrupt header, skipped from %d to %d dataLen: %d, allocSize: %d, end: %d", this.root, offset, actualOffset, dataLen, allocSize, endOffet)
+			log.Printf("%s found corrupt header, skipped from %d to %d dataLen: %d, allocSize: %d, end: %d", this.root, offset, uncorruptedOffset, dataLen, allocSize, endOffet)
 		}
 		offset = uncorruptedOffset
 
