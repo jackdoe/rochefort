@@ -34,10 +34,12 @@ func TestCompact(t *testing.T) {
 		t.FailNow()
 	}
 
-	storage.compact()
-	if compactedOffset != uint32(storage.offset) {
-		t.Log("compactedOffset != stored.offset")
-		t.FailNow()
+	for i := 0; i < 10; i++ {
+		storage.compact()
+		if compactedOffset != uint32(storage.offset) {
+			t.Log("compactedOffset != stored.offset")
+			t.FailNow()
+		}
 	}
 	fi, err := storage.descriptor.Stat()
 	if err != nil {

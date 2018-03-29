@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dgryski/go-metro"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -159,7 +160,7 @@ SCAN:
 		// this is lockless, which means we could read a header,
 		// but the data might be incomplete
 
-		dataLen, _, allocSize, err := readHeader(this.descriptor, offset)
+		dataLen, allocSize, err := readHeader(this.descriptor, offset)
 		if err != nil {
 			break SCAN
 		}
@@ -184,33 +185,42 @@ func (this *StoreItem) compact() error {
 	if len(this.index) > 0 {
 		return errors.New("can not compact indexed items")
 	}
+	if this.offset <= headerLen {
+		return errors.New("data is too small, nothing to compact")
+	}
 
 	actualOffset := uint64(0)
-
-	for offset := uint64(0); offset < this.offset; {
+	endOffet := this.offset - uint64(headerLen)
+	for offset := uint64(0); offset < endOffet; {
 		// this is lockless, which means we could read a header,
 		// but the data might be incomplete
-
-		dataLen, _, allocSize, err := readHeader(this.descriptor, offset)
+		uncorruptedOffset, dataLen, allocSize, err := gotoNextValidHeader(this.descriptor, offset, endOffet)
 		if err != nil {
-			log.Fatalf("failed to read header at %d, err: %s", offset, err.Error())
+			log.Printf("%s failed to read header at %d, err: %s", this.root, offset, err.Error())
+			break
 		}
+		if offset != uncorruptedOffset {
+			log.Printf("%s found corrupt header, skipped from %d to %d dataLen: %d, allocSize: %d, end: %d", this.root, offset, actualOffset, dataLen, allocSize, endOffet)
+		}
+		offset = uncorruptedOffset
 
 		storedData := make([]byte, dataLen)
 		_, err = this.descriptor.ReadAt(storedData, int64(offset)+int64(headerLen))
 		if err != nil {
-			log.Fatalf("failed to read data at %d, err: %s", offset+headerLen, err.Error())
+			log.Printf("%s failed to read data at %d, err: %s", this.root, offset+headerLen, err.Error())
+			break
 		}
 
 		this.writeHeader(actualOffset, dataLen, dataLen)
 		_, err = this.descriptor.WriteAt(storedData, int64(actualOffset)+int64(headerLen))
 		if err != nil {
-			log.Fatalf("failed to write data at %d, err: %s", int64(actualOffset)+int64(headerLen), err.Error())
+			log.Printf("%s failed to write data at %d, err: %s", this.root, int64(actualOffset)+int64(headerLen), err.Error())
+			break
 		}
 
 		actualOffset += uint64(dataLen) + uint64(headerLen)
-
 		offset += uint64(allocSize) + uint64(headerLen)
+
 	}
 
 	// this will lose data if something was actually written in the end of the file
@@ -230,7 +240,7 @@ func (this *StoreItem) compact() error {
 func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
 	for query.Next() != NO_MORE {
 		offset := uint64(query.GetDocId())
-		dataLen, _, _, err := readHeader(this.descriptor, offset)
+		dataLen, _, err := readHeader(this.descriptor, offset)
 		if err != nil {
 			break
 		}
@@ -249,28 +259,46 @@ func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
 
 const headerLen = 4 + 8 + 4 + 4
 
-func readHeader(file *os.File, offset uint64) (uint32, uint64, uint32, error) {
+var wrongChecksumError = errors.New("wrong checksum")
+var noValidHeaderFoundError = errors.New("no valid header found")
+
+func gotoNextValidHeader(file *os.File, offset, endOffset uint64) (uint64, uint32, uint32, error) {
+	for start := offset; start < endOffset; start++ {
+		dataLen, allocSize, err := readHeader(file, start)
+		if err == nil {
+			return start, dataLen, allocSize, nil
+		} else {
+			if err == io.EOF {
+				return 0, 0, 0, noValidHeaderFoundError
+			}
+		}
+	}
+
+	return 0, 0, 0, noValidHeaderFoundError
+
+}
+func readHeader(file *os.File, offset uint64) (uint32, uint32, error) {
 	headerBytes := make([]byte, headerLen)
 	_, err := file.ReadAt(headerBytes, int64(offset))
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
 	dataLen := binary.LittleEndian.Uint32(headerBytes[0:])
-	nextBlock := binary.LittleEndian.Uint64(headerBytes[4:])
+
 	allocSize := binary.LittleEndian.Uint32(headerBytes[12:])
 	checksum := binary.LittleEndian.Uint32(headerBytes[16:])
 	computedChecksum := crc(headerBytes[0:16])
 	if checksum != computedChecksum {
-		return 0, 0, 0, errors.New(fmt.Sprintf("wrong checksum got: %d, expected: %d", computedChecksum, checksum))
+		return 0, 0, wrongChecksumError
 	}
-	return dataLen, nextBlock, allocSize, nil
+	return dataLen, allocSize, nil
 }
 
 func (this *StoreItem) writeHeader(currentOffset uint64, dataLen uint32, allocSize uint32) {
 	header := make([]byte, headerLen)
 
 	binary.LittleEndian.PutUint32(header[0:], uint32(dataLen))
-	binary.LittleEndian.PutUint64(header[4:], uint64(0))
+	binary.LittleEndian.PutUint64(header[4:], uint64(time.Now().UnixNano()))
 	binary.LittleEndian.PutUint32(header[12:], allocSize)
 
 	checksum := crc(header[0:16])
@@ -296,7 +324,7 @@ func (this *StoreItem) appendPostings(name string, value uint64) {
 
 func (this *StoreItem) read(offset uint64) ([]byte, error) {
 	// lockless read
-	dataLen, _, _, err := readHeader(this.descriptor, offset)
+	dataLen, _, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +356,7 @@ func (this *StoreItem) append(allocSize uint32, dataRaw []byte) (uint64, error) 
 }
 
 func (this *StoreItem) modify(offset uint64, pos int32, dataRaw []byte, resetLength bool) error {
-	oldDataLen, _, allocSize, err := readHeader(this.descriptor, offset)
+	oldDataLen, allocSize, err := readHeader(this.descriptor, offset)
 	if err != nil {
 		return err
 	}
