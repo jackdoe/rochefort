@@ -189,8 +189,33 @@ func (this *StoreItem) compact() error {
 		return errors.New("data is too small, nothing to compact")
 	}
 
-	actualOffset := uint64(0)
 	endOffet := this.offset - uint64(headerLen)
+	needCompaction := false
+	for offset := uint64(0); offset < endOffet; {
+		// this is lockless, which means we could read a header,
+		// but the data might be incomplete
+		uncorruptedOffset, dataLen, allocSize, err := gotoNextValidHeader(this.descriptor, offset, endOffet)
+		if err != nil {
+			needCompaction = true
+			break
+		}
+		if offset != uncorruptedOffset {
+			needCompaction = true
+			break
+		}
+		if dataLen != allocSize {
+			needCompaction = true
+			break
+		}
+		offset += uint64(allocSize) + uint64(headerLen)
+	}
+
+	if !needCompaction {
+		log.Printf("%s no compaction needed", this.root)
+		return nil
+	}
+
+	actualOffset := uint64(0)
 	for offset := uint64(0); offset < endOffet; {
 		// this is lockless, which means we could read a header,
 		// but the data might be incomplete
@@ -217,7 +242,6 @@ func (this *StoreItem) compact() error {
 			log.Printf("%s failed to write data at %d, err: %s", this.root, int64(actualOffset)+int64(headerLen), err.Error())
 			break
 		}
-
 		actualOffset += uint64(dataLen) + uint64(headerLen)
 		offset += uint64(allocSize) + uint64(headerLen)
 
