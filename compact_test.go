@@ -146,32 +146,35 @@ func (c *Corruptor) Test(relocationMap map[uint64]uint64) {
 }
 
 func TestForever(t *testing.T) {
-	done := make(chan bool, 1)
-	n := 100
 	path := path.Join(os.TempDir(), "smash")
 	os.RemoveAll(path)
-	storage := NewStorage(path)
-	corruptors := []*Corruptor{}
-	for i := 0; i < n; i++ {
-		c := NewCorruptor(i, storage)
-		corruptors = append(corruptors, c)
-		go c.Smash(done)
-	}
-	i := 0
-	for {
-		<-done
-		i++
-		if i == n {
-			break
+
+	for k := 0; k < 10; k++ {
+		done := make(chan bool, 1)
+		n := 100
+		storage := NewStorage(path)
+		corruptors := []*Corruptor{}
+		for i := 0; i < n; i++ {
+			c := NewCorruptor(i, storage)
+			corruptors = append(corruptors, c)
+			go c.Smash(done)
 		}
-	}
+		i := 0
+		for {
+			<-done
+			i++
+			if i == n {
+				break
+			}
+		}
 
-	relocationMap, err := storage.compact()
-	if err != nil {
-		panic(err)
-	}
+		relocationMap, err := storage.compact()
+		if err != nil {
+			panic(err)
+		}
 
-	for _, c := range corruptors {
-		c.Test(relocationMap)
+		for _, c := range corruptors {
+			c.Test(relocationMap)
+		}
 	}
 }
