@@ -178,15 +178,17 @@ SCAN:
 	}
 }
 
-func (this *StoreItem) compact() error {
+func (this *StoreItem) compact() (map[uint64]uint64, error) {
 	this.Lock()
 	defer this.Unlock()
 
+	relocationMap := map[uint64]uint64{}
+
 	if len(this.index) > 0 {
-		return errors.New("can not compact indexed items")
+		return nil, errors.New("can not compact indexed items")
 	}
 	if this.offset <= headerLen {
-		return errors.New("data is too small, nothing to compact")
+		return nil, errors.New("data is too small, nothing to compact")
 	}
 
 	endOffet := this.offset - uint64(headerLen)
@@ -212,7 +214,7 @@ func (this *StoreItem) compact() error {
 
 	if !needCompaction {
 		log.Printf("%s no compaction needed", this.root)
-		return nil
+		return nil, nil
 	}
 
 	actualOffset := uint64(0)
@@ -237,6 +239,8 @@ func (this *StoreItem) compact() error {
 		}
 
 		this.writeHeader(actualOffset, dataLen, dataLen)
+		relocationMap[offset] = actualOffset
+
 		_, err = this.descriptor.WriteAt(storedData, int64(actualOffset)+int64(headerLen))
 		if err != nil {
 			log.Printf("%s failed to write data at %d, err: %s", this.root, int64(actualOffset)+int64(headerLen), err.Error())
@@ -244,7 +248,6 @@ func (this *StoreItem) compact() error {
 		}
 		actualOffset += uint64(dataLen) + uint64(headerLen)
 		offset += uint64(allocSize) + uint64(headerLen)
-
 	}
 
 	// this will lose data if something was actually written in the end of the file
@@ -258,7 +261,7 @@ func (this *StoreItem) compact() error {
 	log.Printf("compaction %s done, old size: %d, new size: %d", this.root, this.offset, actualOffset)
 	atomic.StoreUint64(&this.offset, actualOffset)
 
-	return nil
+	return relocationMap, nil
 }
 
 func (this *StoreItem) ExecuteQuery(query Query, cb func(uint64, []byte) bool) {
@@ -490,7 +493,8 @@ func (this *MultiStore) scan(storageIdentifier string, cb func(uint64, []byte) b
 }
 
 func (this *MultiStore) compact(storageIdentifier string) error {
-	return this.find(storageIdentifier).compact()
+	_, e := this.find(storageIdentifier).compact()
+	return e
 }
 
 func (this *MultiStore) ExecuteQuery(storageIdentifier string, query Query, cb func(uint64, []byte) bool) {
